@@ -7,6 +7,7 @@ import { initializeApp, cert, applicationDefault } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 import { DateTime } from 'luxon'
 import { buildDigestHtml } from '../lib/digest.js'
+import { bumpUsage } from '../lib/usage.js'
 
 const TZ = 'Asia/Jerusalem'
 
@@ -70,6 +71,7 @@ async function main() {
   })
   const body = await res.text()
   if (!res.ok) throw new Error(`Resend ${res.status}: ${body.slice(0, 300)}`)
+  await bumpUsage(db, dateStr, { emailsSent: 1 })
   console.log(`Digest sent to ${to}. ${body.slice(0, 120)}`)
 }
 

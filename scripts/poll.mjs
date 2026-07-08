@@ -11,6 +11,7 @@ import { DateTime } from 'luxon'
 import { fetchSnapshots } from '../lib/yahoo.js'
 import { classify } from '../lib/volatility.js'
 import { explainMove } from '../lib/explain.js'
+import { bumpUsage } from '../lib/usage.js'
 
 const TZ = 'Asia/Jerusalem'
 
@@ -66,6 +67,7 @@ async function main() {
   // into a higher band, so Phase 4 explains a fresh/worsening move but not every 15-min tick.
   const dateStr = DateTime.now().setZone(TZ).toISODate()
   let flagged = 0
+  let eventWrites = 0
   for (const it of items) {
     const snap = byPrice[it.priceSymbol || it.symbol]
     if (!snap) continue
@@ -95,41 +97,52 @@ async function main() {
       },
       { merge: true },
     )
+    eventWrites++
     if (fresh) flagged++
   }
   console.log(`Volatility: ${flagged} new/worsening event(s) flagged for explanation.`)
 
   // 3) Phase 4 — generate explanations for flagged events (Gemini + Google Search grounding).
   const geminiKey = process.env.GEMINI_API_KEY
-  if (!geminiKey) {
-    console.log('GEMINI_API_KEY not set — skipping explanations.')
-    return
-  }
-  const pending = await db.collection('events').where('needsExplanation', '==', true).get()
-  let explained = 0
-  for (const d of pending.docs) {
-    const ev = d.data()
-    try {
-      const r = await explainMove(ev, geminiKey)
-      await db.collection('explanations').doc(d.id).set({
-        symbol: ev.symbol,
-        nameHe: ev.nameHe,
-        date: ev.date,
-        changePct: ev.changePct,
-        direction: ev.direction,
-        explanation: r.explanation,
-        confidence: r.confidence,
-        sources: r.sources,
-        model: r.model,
-        at: Date.now(),
-      })
-      await d.ref.update({ needsExplanation: false, explainedAt: Date.now() })
-      explained++
-    } catch (e) {
-      console.warn(`explain failed for ${d.id}: ${e.message}`)
+  let geminiCalls = 0
+  let explanationWrites = 0
+  if (geminiKey) {
+    const pending = await db.collection('events').where('needsExplanation', '==', true).get()
+    let explained = 0
+    for (const d of pending.docs) {
+      const ev = d.data()
+      try {
+        geminiCalls++
+        const r = await explainMove(ev, geminiKey)
+        await db.collection('explanations').doc(d.id).set({
+          symbol: ev.symbol,
+          nameHe: ev.nameHe,
+          date: ev.date,
+          changePct: ev.changePct,
+          direction: ev.direction,
+          explanation: r.explanation,
+          confidence: r.confidence,
+          sources: r.sources,
+          model: r.model,
+          at: Date.now(),
+        })
+        await d.ref.update({ needsExplanation: false, explainedAt: Date.now() })
+        explanationWrites += 2
+        explained++
+      } catch (e) {
+        console.warn(`explain failed for ${d.id}: ${e.message}`)
+      }
     }
+    console.log(`Explanations: generated ${explained}.`)
+  } else {
+    console.log('GEMINI_API_KEY not set — skipping explanations.')
   }
-  console.log(`Explanations: generated ${explained}.`)
+
+  // 4) Self-count usage for the free-tier monitor (+1 for this bump write).
+  await bumpUsage(db, dateStr, {
+    firestoreWrites: ok + eventWrites + explanationWrites + 1,
+    geminiCalls,
+  })
 }
 
 main().then(() => process.exit(0)).catch((e) => {

@@ -107,6 +107,10 @@ Single-user MVP now, but designed so multi-tenant SaaS is an extension, not a re
   grounding researches overnight/global news → plain-Hebrew "how it may open" + sentiment) +
   `scripts/morning.mjs` + `.github/workflows/morning.yml` (cron 06:00 UTC Sun–Thu). Framed as
   assessment, not prediction/advice. Verified live. Needs RESEND_API_KEY + DIGEST_TO to send.
+- [x] **6c — Free-tier usage monitor (09:00 daily):** scripts self-count ops into `usage/{date}`
+  (`bumpUsage`); `scripts/usage.mjs` + `.github/workflows/usage.yml` email a summary vs free limits
+  (`lib/usage.js`). Tracks writes/Gemini calls/emails accurately; reads noted as estimate; GitHub
+  Actions (public repo) + Hosting noted as unlimited/negligible. Verified sending.
 - Note: LLM responses parsed via **labeled lines** (ביטחון:/הסבר:/סנטימנט:/הערכה:), NOT JSON —
   Hebrew gershayim (ארה"ב, ת"א) break JSON strings. Applies to `explain.js` + `morning.js`.
 - [ ] **7 — Polish:** honest framing, disclaimers, error handling.

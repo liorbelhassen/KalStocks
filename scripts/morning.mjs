@@ -7,6 +7,7 @@ import { initializeApp, cert, applicationDefault } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 import { DateTime } from 'luxon'
 import { assessOpen, buildMorningHtml } from '../lib/morning.js'
+import { bumpUsage } from '../lib/usage.js'
 
 const TZ = 'Asia/Jerusalem'
 
@@ -40,8 +41,10 @@ async function main() {
   }
 
   const assessments = {}
+  let geminiCalls = 0
   for (const g of groups.values()) {
     try {
+      geminiCalls++
       assessments[g.priceSymbol] = await assessOpen(
         { nameHe: g.repName, symbol: g.priceSymbol, date: dateStr, isIndex: !!g.isIndex },
         geminiKey,
@@ -50,6 +53,7 @@ async function main() {
       console.warn(`assess failed for ${g.priceSymbol}: ${e.message}`)
     }
   }
+  await bumpUsage(db, dateStr, { geminiCalls })
 
   const emailItems = items.map((w) => {
     const ps = w.priceSymbol || w.symbol
@@ -83,6 +87,7 @@ async function main() {
   })
   const body = await res.text()
   if (!res.ok) throw new Error(`Resend ${res.status}: ${body.slice(0, 300)}`)
+  await bumpUsage(db, dateStr, { emailsSent: 1 })
   console.log(`Morning brief sent to ${to}.`)
 }
 
