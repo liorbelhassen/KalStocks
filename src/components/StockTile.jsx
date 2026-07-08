@@ -29,12 +29,12 @@ function MiniField({ label, value, onCommit, width = 46 }) {
 
 function Badge({ badge }) {
   if (!badge) return null
-  if (badge.flag) return <span style={{ fontSize: 20, flexShrink: 0 }}>🇮🇱</span>
+  if (badge.flag) return <span style={{ fontSize: 28, flexShrink: 0 }}>🇮🇱</span>
   if (badge.logo) {
     return (
       <img
-        src={badge.logo} alt="" width={26} height={26}
-        style={{ borderRadius: 5, background: '#fff', objectFit: 'contain', flexShrink: 0 }}
+        src={badge.logo} alt="" width={34} height={34}
+        style={{ borderRadius: 6, background: '#fff', objectFit: 'contain', flexShrink: 0 }}
         onError={(e) => { e.currentTarget.style.display = 'none' }}
       />
     )
@@ -70,23 +70,23 @@ export default function StockTile({ stock, onRemove, onQuantity, onPrice }) {
       }}
     >
       {/* 1 · identity */}
-      <div style={{ width: 148, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+      <div style={{ width: 172, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
         <Badge badge={stock.badge} />
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stock.nameHe}</div>
-          <div style={{ fontSize: 11, color: 'var(--text-dim)', direction: 'ltr', textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ fontSize: 19, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stock.nameHe}</div>
+          <div style={{ fontSize: 12.5, color: 'var(--text-dim)', direction: 'ltr', textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {stock.subtitle}
           </div>
         </div>
       </div>
 
       {/* 2 · price + change */}
-      <div style={{ width: 96, flexShrink: 0, textAlign: 'left', direction: 'ltr' }}>
-        <div style={{ fontSize: 15, fontWeight: 700 }}>
+      <div style={{ width: 118, flexShrink: 0, textAlign: 'left', direction: 'ltr' }}>
+        <div style={{ fontSize: 21, fontWeight: 800 }}>
           {hasPrice ? (stock.isIndex ? fmt(stock.priceIls) : `${cur}${fmt(stock.priceIls)}`) : '—'}
         </div>
         {hasChange && (
-          <span style={{ display: 'inline-block', marginTop: 2, padding: '1px 6px', borderRadius: 999, background: bg, color, fontSize: 12, fontWeight: 700 }}>
+          <span style={{ display: 'inline-block', marginTop: 4, padding: '2px 8px', borderRadius: 999, background: bg, color, fontSize: 14, fontWeight: 700 }}>
             {up ? '▲' : '▼'} {Math.abs(stock.changePct).toFixed(2)}%
           </span>
         )}
