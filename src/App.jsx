@@ -284,7 +284,7 @@ export default function App() {
           עדיין אין מניות במעקב. חפש למעלה או העלה צילום מסך כדי להתחיל.
         </div>
       ) : (
-        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
+        <section style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {stocks.map((s) => (
             <StockTile
               key={s.key}
