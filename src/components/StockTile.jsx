@@ -74,7 +74,7 @@ export default function StockTile({ stock, onRemove, onQuantity, onPrice }) {
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stock.nameHe}</div>
           <div style={{ fontSize: 11, color: 'var(--text-dim)', direction: 'ltr', textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {stock.etf ? 'עוקב ת"א 35' : stock.symbol}
+            {stock.subtitle}
           </div>
         </div>
       </div>
@@ -133,7 +133,7 @@ export default function StockTile({ stock, onRemove, onQuantity, onPrice }) {
       <div style={{ width: 132, flexShrink: 0, direction: 'ltr', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
         {value != null && <div style={{ fontSize: 15, fontWeight: 800 }}>₪{fmt0(value)}</div>}
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-          {stock.etf && <MiniField key={'p' + (stock.manualPrice ?? 'n')} label="מחיר ₪" value={stock.manualPrice} onCommit={onPrice} width={50} />}
+          {stock.needsPrice && <MiniField key={'p' + (stock.manualPrice ?? 'n')} label="מחיר ₪" value={stock.manualPrice} onCommit={onPrice} width={50} />}
           <MiniField key={'q' + (stock.quantity ?? 'n')} label="כמות" value={stock.quantity} onCommit={onQuantity} width={44} />
         </div>
       </div>

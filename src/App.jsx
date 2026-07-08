@@ -79,7 +79,7 @@ export default function App() {
     try {
       const holdings = await analyzeScreenshot(file)
       let added = 0
-      const unmatched = []
+      const manualAdded = []
       for (const h of holdings) {
         const match = matchInstrument(h.name)
         if (match) {
@@ -87,11 +87,16 @@ export default function App() {
           loadQuote(match.priceSymbol || match.symbol)
           added++
         } else {
-          unmatched.push(h.name)
+          // Not in the catalog (small-caps etc.) — add anyway with manual pricing, so nothing is dropped.
+          const sym = 'X-' + h.name.trim().replace(/[/.#$[\]]/g, '-').slice(0, 40)
+          await addToWatchlist({ symbol: sym, nameHe: h.name.trim(), priceSymbol: sym, kind: 'other', quantity: h.quantity ?? undefined })
+          manualAdded.push(h.name.trim())
+          added++
         }
       }
       setImportMsg(
-        `זוהו ${holdings.length} · נוספו/עודכנו ${added}` + (unmatched.length ? ` · לא זוהו בקטלוג: ${unmatched.join(', ')}` : ''),
+        `זוהו ${holdings.length} · נוספו/עודכנו ${added}` +
+          (manualAdded.length ? ` · הזן מחיר ידני ל: ${manualAdded.join(', ')}` : ''),
       )
     } catch (err) {
       setImportMsg('⚠️ ' + err.message)
@@ -104,9 +109,10 @@ export default function App() {
     const priceSym = w.priceSymbol || w.symbol
     const snap = snapshots[priceSym] || liveQuotes[priceSym]
     const isEtf = w.kind === 'etf'
-    // ETFs aren't priced on the free source (we only have the index level), so use the user's
-    // manual price for them; equities/index use the live Yahoo price.
-    const effectivePrice = w.manualPrice != null ? w.manualPrice : isEtf ? null : snap?.priceIls
+    // ETFs (index proxy) and 'other' (small-caps not on the free source) are priced manually;
+    // equities/index use the live Yahoo price.
+    const needsPrice = isEtf || w.kind === 'other'
+    const effectivePrice = w.manualPrice != null ? w.manualPrice : needsPrice ? null : snap?.priceIls
     const exp = explanations[w.symbol]
     const brief = briefs[priceSym]
     const hhmm = (ms) => (ms ? new Date(ms).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '')
@@ -131,13 +137,13 @@ export default function App() {
       badge: isFlag(w.symbol, { kind: w.kind, isIndex: snap?.isIndex })
         ? { flag: true }
         : { logo: logoUrl(w.symbol) },
-      note: isEtf ? 'עוקב אחרי מדד ת"א 35 · הזן מחיר קרן לחישוב שווי' : null,
+      subtitle: isEtf ? 'עוקב ת"א 35' : w.kind === 'other' ? 'מחיר ידני' : w.symbol,
       thresholdPct: w.thresholdPct,
       quantity: w.quantity,
       sector: sectorOf(w.symbol),
-      etf: isEtf,
+      needsPrice,
       manualPrice: w.manualPrice,
-      isIndex: isEtf ? false : snap?.isIndex,
+      isIndex: needsPrice ? false : snap?.isIndex,
       priceIls: effectivePrice,
       changePct: snap?.changePct,
       series: snap?.series || [],
