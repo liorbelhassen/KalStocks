@@ -38,6 +38,7 @@ export async function addToWatchlist({
   nameHe,
   priceSymbol,
   kind = 'equity',
+  market = 'IL',
   thresholdPct,
   notifyTelegram = false,
   quantity,
@@ -50,6 +51,7 @@ export async function addToWatchlist({
     nameHe: nameHe?.trim() || sym,
     priceSymbol: (priceSymbol || sym).trim(),
     kind,
+    market,
     thresholdPct: thresholdPct ?? defaultThresholdFor(kind),
     notifyTelegram,
   }

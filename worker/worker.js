@@ -7,22 +7,23 @@ import { getAccessToken, listDocs, patchDoc } from './firestore.js'
 
 const ALLOWED = ['https://kalstocks1.web.app', 'http://localhost:5175', 'http://localhost:5173']
 
-// TASE hours check in Israel time (works across DST via Intl).
-function taseOpen() {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Jerusalem', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
-  }).formatToParts(new Date())
-  const wd = parts.find((p) => p.type === 'weekday').value
-  const hh = +parts.find((p) => p.type === 'hour').value
-  const mm = +parts.find((p) => p.type === 'minute').value
-  const minutes = hh * 60 + mm
-  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu'].includes(wd) && minutes >= 9 * 60 + 30 && minutes <= 17 * 60 + 20
+// Open if TASE (Israel, Sun–Thu) OR US markets (New York, Mon–Fri) are trading. DST-safe via Intl.
+function minutesInZone(tz) {
+  const p = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date())
+  return { wd: p.find((x) => x.type === 'weekday').value, min: +p.find((x) => x.type === 'hour').value * 60 + +p.find((x) => x.type === 'minute').value }
+}
+function marketOpen() {
+  const il = minutesInZone('Asia/Jerusalem')
+  const taseOpen = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu'].includes(il.wd) && il.min >= 570 && il.min <= 1040
+  const ny = minutesInZone('America/New_York')
+  const usOpen = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(ny.wd) && ny.min >= 570 && ny.min < 960
+  return taseOpen || usOpen
 }
 
 // Reliable 5-min price poll (Cloudflare cron). Writes snapshots to Firestore via REST.
 async function pollPrices(env) {
   if (!env.SERVICE_ACCOUNT) return
-  if (!taseOpen()) return
+  if (!marketOpen()) return
   const sa = JSON.parse(env.SERVICE_ACCOUNT)
   const token = await getAccessToken(sa)
   const wl = await listDocs(token, sa.project_id, 'watchlist')

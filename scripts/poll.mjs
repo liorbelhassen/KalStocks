@@ -15,12 +15,15 @@ import { bumpUsage } from '../lib/usage.js'
 
 const TZ = 'Asia/Jerusalem'
 
-// TASE trades Sun–Thu, ~09:30–17:15 Israel time. Skip outside hours.
-function isTaseOpen(now = DateTime.now().setZone(TZ)) {
-  const dow = now.weekday // 1=Mon … 7=Sun
-  const isTradingDay = dow === 7 || (dow >= 1 && dow <= 4)
-  const minutes = now.hour * 60 + now.minute
-  return isTradingDay && minutes >= 9 * 60 + 30 && minutes <= 17 * 60 + 20
+// Open if TASE (Sun–Thu 09:30–17:20 Israel) OR US markets (Mon–Fri 09:30–16:00 New York) are open.
+function isMarketOpen() {
+  const il = DateTime.now().setZone(TZ)
+  const ilMin = il.hour * 60 + il.minute
+  const taseOpen = (il.weekday === 7 || (il.weekday >= 1 && il.weekday <= 4)) && ilMin >= 570 && ilMin <= 1040
+  const ny = DateTime.now().setZone('America/New_York')
+  const nyMin = ny.hour * 60 + ny.minute
+  const usOpen = ny.weekday >= 1 && ny.weekday <= 5 && nyMin >= 570 && nyMin < 960
+  return taseOpen || usOpen
 }
 
 function initApp() {
@@ -31,8 +34,8 @@ function initApp() {
 
 async function main() {
   const force = process.argv.includes('--force')
-  if (!force && !isTaseOpen()) {
-    console.log('TASE closed — skipping poll. (use --force to override)')
+  if (!force && !isMarketOpen()) {
+    console.log('Markets closed — skipping poll. (use --force to override)')
     return
   }
 

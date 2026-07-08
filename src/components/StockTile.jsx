@@ -43,6 +43,7 @@ function Badge({ badge }) {
 }
 
 export default function StockTile({ stock, onRemove, onQuantity, onPrice }) {
+  const cur = stock.currency || '₪'
   const hasPrice = stock.priceIls != null
   const hasChange = stock.changePct != null
   const up = (stock.changePct ?? 0) >= 0
@@ -82,7 +83,7 @@ export default function StockTile({ stock, onRemove, onQuantity, onPrice }) {
       {/* 2 · price + change */}
       <div style={{ width: 96, flexShrink: 0, textAlign: 'left', direction: 'ltr' }}>
         <div style={{ fontSize: 15, fontWeight: 700 }}>
-          {hasPrice ? (stock.isIndex ? fmt(stock.priceIls) : `₪${fmt(stock.priceIls)}`) : '—'}
+          {hasPrice ? (stock.isIndex ? fmt(stock.priceIls) : `${cur}${fmt(stock.priceIls)}`) : '—'}
         </div>
         {hasChange && (
           <span style={{ display: 'inline-block', marginTop: 2, padding: '1px 6px', borderRadius: 999, background: bg, color, fontSize: 12, fontWeight: 700 }}>
@@ -131,9 +132,9 @@ export default function StockTile({ stock, onRemove, onQuantity, onPrice }) {
 
       {/* 5 · holdings — value prominent, compact inputs, no clutter */}
       <div style={{ width: 132, flexShrink: 0, direction: 'ltr', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
-        {value != null && <div style={{ fontSize: 15, fontWeight: 800 }}>₪{fmt0(value)}</div>}
+        {value != null && <div style={{ fontSize: 15, fontWeight: 800 }}>{cur}{fmt0(value)}</div>}
         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-          {stock.needsPrice && <MiniField key={'p' + (stock.manualPrice ?? 'n')} label="מחיר ₪" value={stock.manualPrice} onCommit={onPrice} width={50} />}
+          {stock.needsPrice && <MiniField key={'p' + (stock.manualPrice ?? 'n')} label={`מחיר ${cur}`} value={stock.manualPrice} onCommit={onPrice} width={50} />}
           <MiniField key={'q' + (stock.quantity ?? 'n')} label="כמות" value={stock.quantity} onCommit={onQuantity} width={44} />
         </div>
       </div>

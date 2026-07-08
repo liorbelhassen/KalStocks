@@ -21,6 +21,7 @@ export default function App() {
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [market, setMarket] = useState('IL') // active tab: 'IL' | 'US'
   const [importing, setImporting] = useState(false)
   const [importMsg, setImportMsg] = useState(null)
   const boxRef = useRef(null)
@@ -49,7 +50,7 @@ export default function App() {
   }, [])
 
   const owned = watchlist.map((w) => w.symbol)
-  const results = open ? searchCatalog(q, { excludeSymbols: owned }) : []
+  const results = open ? searchCatalog(q, { excludeSymbols: owned, market }) : []
   const rawTicker = q.trim().toUpperCase()
   const canAddRaw =
     q.trim().length > 0 && !results.some((r) => r.symbol === rawTicker) && !owned.includes(rawTicker)
@@ -108,10 +109,11 @@ export default function App() {
   const stocks = watchlist.map((w) => {
     const priceSym = w.priceSymbol || w.symbol
     const snap = snapshots[priceSym] || liveQuotes[priceSym]
-    const isEtf = w.kind === 'etf'
-    // ETFs (index proxy) and 'other' (small-caps not on the free source) are priced manually;
-    // equities/index use the live Yahoo price.
-    const needsPrice = isEtf || w.kind === 'other'
+    const mkt = w.market || 'IL'
+    // IL ETFs (index proxy) and 'other' (small-caps) are priced manually; everything else
+    // (equities, indices, US ETFs like SPY/QQQ) uses the live Yahoo price.
+    const isIlEtf = mkt === 'IL' && w.kind === 'etf'
+    const needsPrice = isIlEtf || w.kind === 'other'
     const effectivePrice = w.manualPrice != null ? w.manualPrice : needsPrice ? null : snap?.priceIls
     const exp = explanations[w.symbol]
     const brief = briefs[priceSym]
@@ -137,10 +139,12 @@ export default function App() {
       badge: isFlag(w.symbol, { kind: w.kind, isIndex: snap?.isIndex })
         ? { flag: true }
         : { logo: logoUrl(w.symbol) },
-      subtitle: isEtf ? 'עוקב ת"א 35' : w.kind === 'other' ? 'מחיר ידני' : w.symbol,
+      subtitle: isIlEtf ? 'עוקב ת"א 35' : w.kind === 'other' ? 'מחיר ידני' : w.symbol,
       thresholdPct: w.thresholdPct,
       quantity: w.quantity,
       sector: sectorOf(w.symbol),
+      market: mkt,
+      currency: mkt === 'US' ? '$' : '₪',
       needsPrice,
       manualPrice: w.manualPrice,
       isIndex: needsPrice ? false : snap?.isIndex,
@@ -151,10 +155,12 @@ export default function App() {
     }
   })
 
-  const totalValue = stocks.reduce(
+  const marketStocks = stocks.filter((s) => s.market === market)
+  const totalValue = marketStocks.reduce(
     (sum, s) => sum + (s.quantity > 0 && s.priceIls != null ? s.quantity * s.priceIls : 0),
     0,
   )
+  const totalCurrency = market === 'US' ? '$' : '₪'
 
   const lastUpdatedMs = Math.max(0, ...Object.values(snapshots).map((s) => s.updatedAt || 0))
   const lastUpdatedLabel = lastUpdatedMs
@@ -165,7 +171,7 @@ export default function App() {
 
   // Group rows by sector (banks, indices, ETFs…) in a fixed display order.
   const grouped = {}
-  stocks.forEach((s) => {
+  marketStocks.forEach((s) => {
     ;(grouped[s.sector] ||= []).push(s)
   })
   const sectorsPresent = [
@@ -184,8 +190,8 @@ export default function App() {
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
             {totalValue > 0 && (
               <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 14px' }}>
-                <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>שווי תיק כולל</div>
-                <div style={{ fontSize: 21, fontWeight: 800, direction: 'ltr', textAlign: 'left' }}>₪{fmtIls(totalValue)}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>שווי תיק ({market === 'US' ? '🇺🇸' : '🇮🇱'})</div>
+                <div style={{ fontSize: 21, fontWeight: 800, direction: 'ltr', textAlign: 'left' }}>{totalCurrency}{fmtIls(totalValue)}</div>
               </div>
             )}
             <button
@@ -204,6 +210,23 @@ export default function App() {
           נתונים לצורכי מידע בלבד — אינם מהווים ייעוץ השקעות · המחירים מתעדכנים באיחור של כ־15 דקות.
         </p>
       </header>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        {[['IL', '🇮🇱 ישראל'], ['US', '🇺🇸 ארה"ב']].map(([m, lbl]) => (
+          <button
+            key={m}
+            onClick={() => setMarket(m)}
+            style={{
+              background: market === m ? 'var(--accent)' : 'var(--panel)',
+              color: market === m ? '#fff' : 'var(--text-dim)',
+              border: '1px solid var(--border)', borderRadius: 10, padding: '8px 20px',
+              fontSize: 14, fontWeight: 700, cursor: 'pointer',
+            }}
+          >
+            {lbl}
+          </button>
+        ))}
+      </div>
 
       {settingsOpen && (
         <Settings
@@ -269,7 +292,7 @@ export default function App() {
             ))}
             {canAddRaw && (
               <button
-                onClick={() => add({ symbol: rawTicker, nameHe: rawTicker, priceSymbol: rawTicker, kind: 'equity' })}
+                onClick={() => add({ symbol: rawTicker, nameHe: rawTicker, priceSymbol: rawTicker, kind: 'equity', market })}
                 style={{
                   display: 'block', width: '100%', padding: '10px 14px', background: 'transparent',
                   border: 'none', color: 'var(--accent)', textAlign: 'start', fontSize: 13.5,
@@ -302,9 +325,9 @@ export default function App() {
       </div>
       {importMsg && <div style={{ fontSize: 12.5, color: 'var(--text-dim)', marginBottom: 16 }}>{importMsg}</div>}
 
-      {stocks.length === 0 ? (
+      {marketStocks.length === 0 ? (
         <div style={{ color: 'var(--text-dim)', fontSize: 14, textAlign: 'center', padding: '40px 0' }}>
-          עדיין אין מניות במעקב. חפש למעלה או העלה צילום מסך כדי להתחיל.
+          {market === 'US' ? 'אין מניות אמריקאיות במעקב. חפש למעלה (למשל: אפל, נאסד"ק) כדי להוסיף.' : 'עדיין אין מניות במעקב. חפש למעלה או העלה צילום מסך כדי להתחיל.'}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>

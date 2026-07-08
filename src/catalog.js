@@ -38,6 +38,21 @@ export const CATALOG = [
   { symbol: 'NVMI.TA', nameHe: 'נובה', kind: 'equity', priceSymbol: 'NVMI.TA', aliases: ['nova'] },
   { symbol: 'ENOG.TA', nameHe: "אנרג'יאן", kind: 'equity', priceSymbol: 'ENOG.TA', aliases: ['אנרגיאן', 'גז', 'energean'] },
   { symbol: 'AZRG.TA', nameHe: 'עזריאלי', kind: 'equity', priceSymbol: 'AZRG.TA', aliases: ['נדל"ן', 'azrieli'] },
+
+  // ── USA ── (Yahoo prices US tickers directly; US ETFs like SPY/QQQ are priced, not proxied)
+  { symbol: '^GSPC', nameHe: 'מדד S&P 500', kind: 'index', priceSymbol: '^GSPC', market: 'US', aliases: ['sp500', 's&p', 'ספי', 'אס אנד פי'] },
+  { symbol: '^IXIC', nameHe: 'נאסד"ק', kind: 'index', priceSymbol: '^IXIC', market: 'US', aliases: ['nasdaq', 'נאסדק'] },
+  { symbol: '^DJI', nameHe: "דאו ג'ונס", kind: 'index', priceSymbol: '^DJI', market: 'US', aliases: ['dow', 'dowjones', 'דאו'] },
+  { symbol: 'SPY', nameHe: 'S&P 500 ETF (SPY)', kind: 'etf', priceSymbol: 'SPY', market: 'US', aliases: ['spy', 'sp500'] },
+  { symbol: 'QQQ', nameHe: 'נאסד"ק ETF (QQQ)', kind: 'etf', priceSymbol: 'QQQ', market: 'US', aliases: ['qqq', 'nasdaq'] },
+  { symbol: 'AAPL', nameHe: 'אפל', kind: 'equity', priceSymbol: 'AAPL', market: 'US', aliases: ['apple', 'אייפון'] },
+  { symbol: 'MSFT', nameHe: 'מיקרוסופט', kind: 'equity', priceSymbol: 'MSFT', market: 'US', aliases: ['microsoft'] },
+  { symbol: 'GOOGL', nameHe: 'גוגל', kind: 'equity', priceSymbol: 'GOOGL', market: 'US', aliases: ['google', 'alphabet', 'אלפאבית'] },
+  { symbol: 'AMZN', nameHe: 'אמזון', kind: 'equity', priceSymbol: 'AMZN', market: 'US', aliases: ['amazon'] },
+  { symbol: 'NVDA', nameHe: 'אנבידיה', kind: 'equity', priceSymbol: 'NVDA', market: 'US', aliases: ['nvidia', 'שבבים'] },
+  { symbol: 'TSLA', nameHe: 'טסלה', kind: 'equity', priceSymbol: 'TSLA', market: 'US', aliases: ['tesla', 'רכב'] },
+  { symbol: 'META', nameHe: 'מטא', kind: 'equity', priceSymbol: 'META', market: 'US', aliases: ['meta', 'facebook', 'פייסבוק'] },
+  { symbol: 'MSTR', nameHe: 'מיקרוסטרטג\'י', kind: 'equity', priceSymbol: 'MSTR', market: 'US', aliases: ['microstrategy', 'strategy', 'ביטקוין'] },
 ]
 
 const KIND_LABEL = { index: 'מדד', equity: 'מניה', etf: 'קרן סל' }
@@ -49,8 +64,12 @@ const SECTORS = {
   'POLI.TA': 'בנקים', 'LUMI.TA': 'בנקים', 'MZTF.TA': 'בנקים', 'DSCT.TA': 'בנקים', 'FIBI.TA': 'בנקים',
   'TEVA.TA': 'פארמה', 'NICE.TA': 'טכנולוגיה', 'ESLT.TA': 'ביטחוניות', 'ICL.TA': 'כימיה',
   'BEZQ.TA': 'תקשורת', 'TSEM.TA': 'שבבים', 'NVMI.TA': 'שבבים', 'ENOG.TA': 'אנרגיה', 'AZRG.TA': 'נדל"ן',
+  // USA
+  '^GSPC': 'מדדים', '^IXIC': 'מדדים', '^DJI': 'מדדים', 'SPY': 'קרנות סל', 'QQQ': 'קרנות סל',
+  'AAPL': 'טכנולוגיה', 'MSFT': 'טכנולוגיה', 'GOOGL': 'טכנולוגיה', 'AMZN': 'טכנולוגיה', 'META': 'טכנולוגיה',
+  'NVDA': 'שבבים', 'TSLA': 'רכב', 'MSTR': 'קריפטו',
 }
-export const SECTOR_ORDER = ['מדדים', 'קרנות סל', 'בנקים', 'ביטוח', 'נדל"ן', 'טכנולוגיה', 'שבבים', 'פארמה', 'ביטחוניות', 'אנרגיה', 'כימיה', 'תקשורת', 'אחר']
+export const SECTOR_ORDER = ['מדדים', 'קרנות סל', 'בנקים', 'ביטוח', 'נדל"ן', 'טכנולוגיה', 'שבבים', 'רכב', 'קריפטו', 'פארמה', 'ביטחוניות', 'אנרגיה', 'כימיה', 'תקשורת', 'אחר']
 export function sectorOf(symbol) {
   if ((symbol || '').startsWith('ETF-')) return 'קרנות סל'
   return SECTORS[symbol] || 'אחר'
@@ -62,11 +81,12 @@ const norm = (s) => (s || '').toLowerCase().replace(/["'`״׳().[\]/\\\-\s]/g, '
 const tokenize = (s) =>
   (s || '').toLowerCase().replace(/["'`״׳().[\]/\\]/g, ' ').split(/\s+/).filter((t) => t.length >= 2)
 
-export function searchCatalog(queryStr, { excludeSymbols = [] } = {}) {
+export function searchCatalog(queryStr, { excludeSymbols = [], market } = {}) {
   const q = norm(queryStr)
   if (!q) return []
   const excluded = new Set(excludeSymbols)
   return CATALOG.filter((item) => {
+    if (market && (item.market || 'IL') !== market) return false
     if (excluded.has(item.symbol)) return false
     const hay = norm([item.nameHe, item.symbol, ...(item.aliases || [])].join(' '))
     return hay.includes(q)
