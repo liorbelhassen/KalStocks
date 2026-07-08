@@ -2,41 +2,28 @@ import { useState } from 'react'
 import { AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts'
 
 const fmt = (n) => n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const fmt0 = (n) => n.toLocaleString('he-IL', { maximumFractionDigits: 0 })
 
-// Keyed by the persisted value in the parent, so it re-initializes when the stored value changes.
-function QuantityEditor({ value, price, hasData, onQuantity }) {
+// Compact labeled field (a neat pill: label + borderless input). Keyed by value in the parent.
+function MiniField({ label, value, onCommit, width = 46 }) {
   const [v, setV] = useState(value ?? '')
   const commit = () => {
-    if (onQuantity && String(v) !== String(value ?? '')) onQuantity(v === '' ? 0 : v)
+    if (onCommit && String(v) !== String(value ?? '')) onCommit(v === '' ? 0 : v)
   }
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--text-dim)', flexWrap: 'wrap' }}>
-      <span>כמות:</span>
+    <span
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--bg)',
+        border: '1px solid var(--border)', borderRadius: 8, padding: '2px 7px', fontSize: 11, color: 'var(--text-dim)',
+      }}
+    >
+      {label}
       <input
-        type="number" min="0" step="1" value={v} placeholder="—"
+        type="number" min="0" step="any" value={v} placeholder="0"
         onChange={(e) => setV(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === 'Enter' && commit()}
-        style={{ width: 58, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 7, padding: '2px 5px', color: 'var(--text)', fontSize: 11.5, direction: 'ltr', textAlign: 'center' }}
+        style={{ width, background: 'transparent', border: 'none', color: 'var(--text)', fontSize: 12.5, fontWeight: 600, direction: 'ltr', textAlign: 'center', outline: 'none', padding: 0 }}
       />
-      {Number(v) > 0 && hasData && <span style={{ color: 'var(--text)' }}>₪{fmt(Number(v) * price)}</span>}
-    </div>
-  )
-}
-
-// Manual ETF unit price (₪) — ETFs aren't on the free data source, so the user enters the price.
-function PriceEditor({ value, onPrice }) {
-  const [v, setV] = useState(value ?? '')
-  const commit = () => {
-    if (onPrice && String(v) !== String(value ?? '')) onPrice(v === '' ? 0 : v)
-  }
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--text-dim)' }}>
-      <span>מחיר ₪:</span>
-      <input
-        type="number" min="0" step="0.01" value={v} placeholder="הזן"
-        onChange={(e) => setV(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === 'Enter' && commit()}
-        style={{ width: 66, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 7, padding: '2px 5px', color: 'var(--text)', fontSize: 11.5, direction: 'ltr', textAlign: 'center' }}
-      />
-    </div>
+    </span>
   )
 }
 
@@ -64,6 +51,9 @@ export default function StockTile({ stock, onRemove, onQuantity, onPrice }) {
   const series = stock.series || []
   const sparkData = series.map((p, i) => ({ i, v: p.v }))
   const gid = 'grad-' + (stock.symbol || '').replace(/[^a-zA-Z0-9]/g, '')
+
+  const qty = Number(stock.quantity) || 0
+  const value = hasPrice && qty > 0 ? qty * stock.priceIls : null
 
   const kind = stock.explanation?.kind
   const label =
@@ -131,7 +121,6 @@ export default function StockTile({ stock, onRemove, onQuantity, onPrice }) {
               <div style={{ fontSize: 10.5, color: 'var(--text-dim)', marginTop: 1 }}>
                 ביטחון: {stock.explanation.confidence}
                 {stock.explanation.sources.length > 0 && ` · ${stock.explanation.sources.slice(0, 2).join(', ')}`}
-                {stock.explanation.at && ` · ${stock.explanation.at}`}
               </div>
             )}
           </>
@@ -140,11 +129,13 @@ export default function StockTile({ stock, onRemove, onQuantity, onPrice }) {
         )}
       </div>
 
-      {/* 5 · holdings */}
-      <div style={{ width: 148, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
-        {stock.etf && <PriceEditor key={stock.manualPrice ?? 'none'} value={stock.manualPrice} onPrice={onPrice} />}
-        <QuantityEditor key={stock.quantity ?? 'none'} value={stock.quantity} price={stock.priceIls} hasData={hasPrice} onQuantity={onQuantity} />
-        {stock.thresholdPct != null && <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>סף התראה: {stock.thresholdPct}%</div>}
+      {/* 5 · holdings — value prominent, compact inputs, no clutter */}
+      <div style={{ width: 132, flexShrink: 0, direction: 'ltr', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+        {value != null && <div style={{ fontSize: 15, fontWeight: 800 }}>₪{fmt0(value)}</div>}
+        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+          {stock.etf && <MiniField key={'p' + (stock.manualPrice ?? 'n')} label="מחיר ₪" value={stock.manualPrice} onCommit={onPrice} width={50} />}
+          <MiniField key={'q' + (stock.quantity ?? 'n')} label="כמות" value={stock.quantity} onCommit={onQuantity} width={44} />
+        </div>
       </div>
 
       {/* 6 · remove */}
