@@ -69,8 +69,8 @@ export default function App() {
           <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800 }}>KalStocks</h1>
           <span style={{ color: 'var(--text-dim)', fontSize: 14 }}>הסבר עממי לתנודות בורסת תל אביב</span>
         </div>
-        <p style={{ color: 'var(--text-dim)', fontSize: 13, marginTop: 6 }}>
-          נתונים לצורכי מידע בלבד — אינם מהווים ייעוץ השקעות.
+        <p style={{ color: 'var(--text-dim)', fontSize: 12, marginTop: 6 }}>
+          נתונים לצורכי מידע בלבד — אינם מהווים ייעוץ השקעות · המחירים מתעדכנים באיחור של כ־15 דקות.
         </p>
       </header>
 

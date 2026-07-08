@@ -81,9 +81,12 @@ Single-user MVP now, but designed so multi-tenant SaaS is an extension, not a re
 - [x] **1 — Price ingestion:** `scripts/poll.mjs` (GitHub Actions cron) fetches Yahoo → `snapshots`,
   currency-normalized, trading-hours gated. `lib/yahoo.js` done + verified. Pending: service account
   so the poller can actually write (local run + GHA secret).
-- [x] **2 — Dashboard live:** subscribes to `snapshots` + `watchlist`; add/remove symbols; quick-adds.
-  Firestore rules deployed to kalstocks1; watchlist read/write verified, snapshots client-write denied.
-  Pending: per-symbol threshold editing UI (currently defaults to 3%).
+- [x] **2 — Dashboard live:** subscribes to `snapshots` + `watchlist`; **autocomplete search** over
+  `src/catalog.js` (name/alias substring, not security number; "35" → index + all TA-35 ETFs);
+  add/remove; favicon. Firestore rules deployed; watchlist RW verified, snapshots client-write denied.
+  **ETF proxy:** watchlist docs carry `priceSymbol` (+ `kind`); ETFs set `priceSymbol=TA35.TA` and the
+  poller polls unique `priceSymbol`s. Pending: per-symbol threshold editing UI (defaults to 3%).
+  Git repo initialized (branch `main`, first commit); not yet pushed to GitHub.
 - [ ] **3 — Volatility detection:** thresholds + intraday swings → `events` (inside `scripts/poll.mjs`).
 - [ ] **4 — Explanation engine:** LLM + web search → Hebrew explanation + sources + confidence.
   Claude API is paid → evaluate a free alternative (Gemini free tier) first.
