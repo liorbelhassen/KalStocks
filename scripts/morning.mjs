@@ -53,7 +53,21 @@ async function main() {
       console.warn(`assess failed for ${g.priceSymbol}: ${e.message}`)
     }
   }
-  await bumpUsage(db, dateStr, { geminiCalls })
+  // Persist assessments as dashboard "baseline insights" (so every stock always shows something).
+  let briefWrites = 0
+  for (const [ps, a] of Object.entries(assessments)) {
+    await db.collection('briefs').doc(`${ps}__${dateStr}`).set({
+      priceSymbol: ps,
+      date: dateStr,
+      assessment: a.assessment,
+      sentiment: a.sentiment,
+      confidence: a.confidence,
+      sources: a.sources || [],
+      at: Date.now(),
+    })
+    briefWrites++
+  }
+  await bumpUsage(db, dateStr, { geminiCalls, firestoreWrites: briefWrites })
 
   const emailItems = items.map((w) => {
     const ps = w.priceSymbol || w.symbol
@@ -71,7 +85,7 @@ async function main() {
     }
   })
 
-  const html = buildMorningHtml({ dateStr: dateHe, items: emailItems })
+  const html = buildMorningHtml({ dateStr: dateHe, items: emailItems, logoToken: process.env.LOGO_TOKEN })
 
   const apiKey = process.env.RESEND_API_KEY
   const to = process.env.DIGEST_TO

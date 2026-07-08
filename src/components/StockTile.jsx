@@ -7,18 +7,20 @@ const tFmt = (t) => new Date(t).toLocaleTimeString('he-IL', { hour: '2-digit', m
 
 function Badge({ badge }) {
   if (!badge) return null
-  if (badge.type === 'flag') return <span style={{ fontSize: 20, flexShrink: 0 }}>{badge.char}</span>
-  return (
-    <span
-      style={{
-        width: 22, height: 22, borderRadius: 5, background: badge.color, color: '#fff',
-        fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center',
-        justifyContent: 'center', flexShrink: 0,
-      }}
-    >
-      {badge.char}
-    </span>
-  )
+  if (badge.flag) return <span style={{ fontSize: 20, flexShrink: 0 }}>🇮🇱</span>
+  if (badge.logo) {
+    return (
+      <img
+        src={badge.logo}
+        alt=""
+        width={22}
+        height={22}
+        style={{ borderRadius: 5, background: '#fff', objectFit: 'contain', flexShrink: 0 }}
+        onError={(e) => { e.currentTarget.style.display = 'none' }}
+      />
+    )
+  }
+  return null
 }
 
 export default function StockTile({ stock, onRemove }) {
@@ -132,6 +134,9 @@ export default function StockTile({ stock, onRemove }) {
             lineHeight: 1.5,
           }}
         >
+          <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 4, color: 'var(--text-dim)' }}>
+            {stock.explanation.kind === 'event' ? '📊 הסבר לתנודה' : '☀️ סקירת בוקר'}
+          </div>
           <div>{stock.explanation.text}</div>
           <div
             style={{

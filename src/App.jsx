@@ -2,15 +2,19 @@ import { useEffect, useRef, useState } from 'react'
 import StockTile from './components/StockTile'
 import Settings from './components/Settings'
 import { searchCatalog, kindLabel } from './catalog'
-import { badgeFor } from '../lib/logos'
+import { logoUrl, isFlag } from '../lib/logos'
+
+const LOGO_TOKEN = import.meta.env.VITE_LOGO_TOKEN
 import { subscribeWatchlist, addToWatchlist, removeFromWatchlist, updateThreshold } from './services/watchlist'
 import { subscribeSnapshots } from './services/snapshots'
 import { subscribeExplanations } from './services/explanations'
+import { subscribeBriefs } from './services/briefs'
 
 export default function App() {
   const [watchlist, setWatchlist] = useState([])
   const [snapshots, setSnapshots] = useState({})
   const [explanations, setExplanations] = useState({})
+  const [briefs, setBriefs] = useState({})
   const [error, setError] = useState(null)
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
@@ -21,10 +25,12 @@ export default function App() {
     const unsubW = subscribeWatchlist(setWatchlist, (e) => setError(e.message))
     const unsubS = subscribeSnapshots(setSnapshots, (e) => setError(e.message))
     const unsubE = subscribeExplanations(setExplanations, (e) => setError(e.message))
+    const unsubB = subscribeBriefs(setBriefs, (e) => setError(e.message))
     return () => {
       unsubW()
       unsubS()
       unsubE()
+      unsubB()
     }
   }, [])
 
@@ -57,25 +63,28 @@ export default function App() {
     const priceSym = w.priceSymbol || w.symbol
     const snap = snapshots[priceSym]
     const exp = explanations[w.symbol]
+    const brief = briefs[priceSym]
+    const hhmm = (ms) => (ms ? new Date(ms).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '')
+    // Significant-event explanation takes priority; otherwise the morning brief is the baseline insight.
+    const insight = exp
+      ? { text: exp.explanation, confidence: exp.confidence, sources: exp.sources || [], at: hhmm(exp.at), kind: 'event' }
+      : brief
+        ? { text: brief.assessment, confidence: brief.confidence, sources: brief.sources || [], at: hhmm(brief.at), kind: 'brief' }
+        : null
     return {
       key: w.symbol,
       symbol: w.symbol,
       nameHe: w.nameHe,
-      badge: badgeFor(w.symbol, w.nameHe, { kind: w.kind, isIndex: snap?.isIndex }),
+      badge: isFlag(w.symbol, { kind: w.kind, isIndex: snap?.isIndex })
+        ? { flag: true }
+        : { logo: logoUrl(w.symbol, LOGO_TOKEN) },
       note: w.kind === 'etf' ? 'מתומחר לפי מדד ת"א 35' : null,
       thresholdPct: w.thresholdPct,
       isIndex: snap?.isIndex,
       priceIls: snap?.priceIls,
       changePct: snap?.changePct,
       series: snap?.series || [],
-      explanation: exp
-        ? {
-            text: exp.explanation,
-            confidence: exp.confidence,
-            sources: exp.sources || [],
-            at: exp.at ? new Date(exp.at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '',
-          }
-        : null,
+      explanation: insight,
     }
   })
 
