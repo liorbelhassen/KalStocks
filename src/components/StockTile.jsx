@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts'
 
 const fmt = (n) => n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const tFmt = (t) => new Date(t).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
 
 // Keyed by the persisted value in the parent, so it re-initializes when the stored value changes.
 function QuantityEditor({ value, price, hasData, onQuantity }) {
