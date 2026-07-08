@@ -9,7 +9,9 @@ service cloud.firestore {
     match /snapshots/{doc}   { allow read: if true; allow write: if false; }
     match /events/{doc}      { allow read: if true; allow write: if false; }
     match /explanations/{doc}{ allow read: if true; allow write: if false; }
+    match /briefs/{doc}      { allow read: if true; allow write: if false; }
     match /alerts_sent/{doc} { allow read: if false; allow write: if false; }
+    match /usage/{doc}       { allow read: if false; allow write: if false; }
 
     // Per-user watchlist. TODO Phase 2/5: lock to request.auth.uid == userId once Auth is wired.
     match /watchlist/{doc} {
