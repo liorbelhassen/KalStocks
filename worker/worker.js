@@ -2,9 +2,48 @@
 //  - vision: a portfolio screenshot → Gemini Vision → detected holdings (Gemini key server-side).
 //  - quote:  fetch a live Yahoo snapshot for a symbol (so a manually-added stock loads instantly,
 //            without waiting for the scheduled poller — no Gemini involved).
-import { fetchSnapshot } from '../lib/yahoo.js'
+import { fetchSnapshot, fetchSnapshots } from '../lib/yahoo.js'
+import { getAccessToken, listDocs, patchDoc } from './firestore.js'
 
 const ALLOWED = ['https://kalstocks1.web.app', 'http://localhost:5175', 'http://localhost:5173']
+
+// TASE hours check in Israel time (works across DST via Intl).
+function taseOpen() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Jerusalem', weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(new Date())
+  const wd = parts.find((p) => p.type === 'weekday').value
+  const hh = +parts.find((p) => p.type === 'hour').value
+  const mm = +parts.find((p) => p.type === 'minute').value
+  const minutes = hh * 60 + mm
+  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu'].includes(wd) && minutes >= 9 * 60 + 30 && minutes <= 17 * 60 + 20
+}
+
+// Reliable 5-min price poll (Cloudflare cron). Writes snapshots to Firestore via REST.
+async function pollPrices(env) {
+  if (!env.SERVICE_ACCOUNT) return
+  if (!taseOpen()) return
+  const sa = JSON.parse(env.SERVICE_ACCOUNT)
+  const token = await getAccessToken(sa)
+  const wl = await listDocs(token, sa.project_id, 'watchlist')
+  const symbols = new Set(['TA35.TA'])
+  wl.forEach((w) => {
+    const p = w.priceSymbol || w.symbol
+    if (p) symbols.add(p)
+  })
+  const snaps = await fetchSnapshots([...symbols])
+  for (const snap of snaps) {
+    if (snap.error) continue
+    try {
+      await patchDoc(token, sa.project_id, `snapshots/${encodeURIComponent(snap.symbol)}`, {
+        ...snap,
+        updatedAt: Date.now(),
+      })
+    } catch {
+      /* skip one symbol on failure */
+    }
+  }
+}
 
 function cors(origin) {
   const allow = ALLOWED.includes(origin) ? origin : ALLOWED[0]
@@ -77,5 +116,10 @@ export default {
     } catch (e) {
       return json({ error: String(e) }, 500, origin)
     }
+  },
+
+  // Cloudflare cron trigger — reliable 5-min price refresh.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(pollPrices(env).catch((e) => console.log('cron poll error:', String(e))))
   },
 }
