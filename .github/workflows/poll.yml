@@ -1,0 +1,27 @@
+name: poll-prices
+
+# Free scheduler (replaces a Blaze Cloud Function). Cron is UTC; the window below
+# roughly covers TASE hours (Sun–Thu, 09:30–17:15 Israel = ~06:30–14:15 UTC in summer),
+# and scripts/poll.mjs double-checks Israel-time trading hours before writing.
+on:
+  schedule:
+    - cron: '*/15 6-15 * * 0-4'
+  workflow_dispatch: {} # manual "Run workflow" button (also lets you force a poll)
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: poll-prices
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - name: Poll prices
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node scripts/poll.mjs
