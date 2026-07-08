@@ -69,8 +69,8 @@ export default function App() {
       const c = snap?.changePct
       if (c == null) return null
       const noun = snap.isIndex ? 'המדד' : 'המניה'
-      const desc = Math.abs(c) < 0.3 ? 'נסחר סביב רמת הפתיחה, ללא שינוי מהותי' : `${c >= 0 ? 'עלה' : 'ירד'} ${Math.abs(c).toFixed(1)}% היום`
-      return { text: `${noun} ${desc}. תובנת AI מפורטת תתווסף בסקירת הבוקר או עם תנודה חריגה.`, confidence: null, sources: [], at: '', kind: 'data' }
+      const desc = Math.abs(c) < 0.3 ? 'נסחר סביב רמת הפתיחה, ללא שינוי מהותי היום' : `${c >= 0 ? 'עלה' : 'ירד'} ${Math.abs(c).toFixed(1)}% היום, במגמה ${c >= 0 ? 'חיובית' : 'שלילית'}`
+      return { text: `${noun} ${desc}.`, confidence: null, sources: [], at: '', kind: 'data' }
     }
     const insight = exp
       ? { text: exp.explanation, confidence: exp.confidence, sources: exp.sources || [], at: hhmm(exp.at), kind: 'event' }
