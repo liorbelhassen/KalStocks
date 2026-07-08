@@ -4,7 +4,9 @@ import Settings from './components/Settings'
 import { searchCatalog, matchInstrument, kindLabel } from './catalog'
 import { logoUrl, isFlag } from '../lib/logos'
 import { subscribeWatchlist, addToWatchlist, removeFromWatchlist, updateThreshold, updateQuantity } from './services/watchlist'
-import { analyzeScreenshot } from './services/vision'
+import { analyzeScreenshot, quoteSymbol } from './services/vision'
+
+const fmtIls = (n) => (n ?? 0).toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 import { subscribeSnapshots } from './services/snapshots'
 import { subscribeExplanations } from './services/explanations'
 import { subscribeBriefs } from './services/briefs'
@@ -14,6 +16,7 @@ export default function App() {
   const [snapshots, setSnapshots] = useState({})
   const [explanations, setExplanations] = useState({})
   const [briefs, setBriefs] = useState({})
+  const [liveQuotes, setLiveQuotes] = useState({}) // instant Worker quotes until the poller persists them
   const [error, setError] = useState(null)
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
@@ -51,11 +54,17 @@ export default function App() {
   const canAddRaw =
     q.trim().length > 0 && !results.some((r) => r.symbol === rawTicker) && !owned.includes(rawTicker)
 
+  const loadQuote = (priceSym) => {
+    if (!priceSym) return
+    quoteSymbol(priceSym).then((s) => s && setLiveQuotes((prev) => ({ ...prev, [priceSym]: s })))
+  }
+
   const add = async (item) => {
     try {
       await addToWatchlist(item)
       setQ('')
       setOpen(false)
+      loadQuote(item.priceSymbol || item.symbol) // instant data, don't wait for the poller
     } catch (err) {
       setError(err.message)
     }
@@ -75,6 +84,7 @@ export default function App() {
         const match = matchInstrument(h.name)
         if (match) {
           await addToWatchlist({ ...match, quantity: h.quantity ?? undefined })
+          loadQuote(match.priceSymbol || match.symbol)
           added++
         } else {
           unmatched.push(h.name)
@@ -92,7 +102,7 @@ export default function App() {
 
   const stocks = watchlist.map((w) => {
     const priceSym = w.priceSymbol || w.symbol
-    const snap = snapshots[priceSym]
+    const snap = snapshots[priceSym] || liveQuotes[priceSym]
     const exp = explanations[w.symbol]
     const brief = briefs[priceSym]
     const hhmm = (ms) => (ms ? new Date(ms).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '')
@@ -128,6 +138,11 @@ export default function App() {
     }
   })
 
+  const totalValue = stocks.reduce(
+    (sum, s) => sum + (s.quantity > 0 && s.priceIls != null ? s.quantity * s.priceIls : 0),
+    0,
+  )
+
   const lastUpdatedMs = Math.max(0, ...Object.values(snapshots).map((s) => s.updatedAt || 0))
   const lastUpdatedLabel = lastUpdatedMs
     ? new Date(lastUpdatedMs).toLocaleString('he-IL', {
@@ -143,16 +158,24 @@ export default function App() {
             <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800 }}>KalStocks</h1>
             <span style={{ color: 'var(--text-dim)', fontSize: 14 }}>הסבר עממי לתנודות בורסת תל אביב</span>
           </div>
-          <button
-            onClick={() => setSettingsOpen(true)}
-            title="הגדרות ספי התראה"
-            style={{
-              background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 10,
-              padding: '8px 14px', color: 'var(--text)', fontSize: 14, whiteSpace: 'nowrap',
-            }}
-          >
-            ⚙️ הגדרות
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+            {totalValue > 0 && (
+              <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 14px' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>שווי תיק כולל</div>
+                <div style={{ fontSize: 21, fontWeight: 800, direction: 'ltr', textAlign: 'left' }}>₪{fmtIls(totalValue)}</div>
+              </div>
+            )}
+            <button
+              onClick={() => setSettingsOpen(true)}
+              title="הגדרות ספי התראה"
+              style={{
+                background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 10,
+                padding: '8px 14px', color: 'var(--text)', fontSize: 14, whiteSpace: 'nowrap',
+              }}
+            >
+              ⚙️ הגדרות
+            </button>
+          </div>
         </div>
         <p style={{ color: 'var(--text-dim)', fontSize: 12, marginTop: 6 }}>
           נתונים לצורכי מידע בלבד — אינם מהווים ייעוץ השקעות · המחירים מתעדכנים באיחור של כ־15 דקות.

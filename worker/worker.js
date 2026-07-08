@@ -1,6 +1,9 @@
-// KalStocks vision proxy (Cloudflare Worker). Receives a portfolio screenshot from the browser,
-// asks Gemini Vision which securities + quantities it shows, and returns them. The Gemini key
-// stays server-side (Worker secret GEMINI_API_KEY) — never exposed in the public site.
+// KalStocks Worker. Two actions:
+//  - vision: a portfolio screenshot → Gemini Vision → detected holdings (Gemini key server-side).
+//  - quote:  fetch a live Yahoo snapshot for a symbol (so a manually-added stock loads instantly,
+//            without waiting for the scheduled poller — no Gemini involved).
+import { fetchSnapshot } from '../lib/yahoo.js'
+
 const ALLOWED = ['https://kalstocks1.web.app', 'http://localhost:5175', 'http://localhost:5173']
 
 function cors(origin) {
@@ -26,7 +29,20 @@ export default {
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors(origin) })
     if (request.method !== 'POST') return json({ error: 'POST only' }, 405, origin)
     try {
-      const { imageBase64, mimeType } = await request.json()
+      const body = await request.json()
+
+      // Action: live quote for a single symbol (instant load on manual add).
+      if (body.action === 'quote') {
+        if (!body.symbol) return json({ error: 'missing symbol' }, 400, origin)
+        try {
+          const snapshot = await fetchSnapshot(body.symbol)
+          return json({ snapshot }, 200, origin)
+        } catch (e) {
+          return json({ error: 'quote failed', detail: String(e) }, 502, origin)
+        }
+      }
+
+      const { imageBase64, mimeType } = body
       if (!imageBase64) return json({ error: 'missing image' }, 400, origin)
 
       const r = await fetch(

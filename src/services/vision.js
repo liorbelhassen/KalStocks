@@ -11,6 +11,22 @@ function fileToBase64(file) {
   })
 }
 
+// Live Yahoo snapshot for a symbol via the Worker (instant load on manual add).
+export async function quoteSymbol(symbol) {
+  if (!VISION_URL) return null
+  try {
+    const res = await fetch(VISION_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'quote', symbol }),
+    })
+    const data = await res.json().catch(() => ({}))
+    return res.ok ? data.snapshot || null : null
+  } catch {
+    return null
+  }
+}
+
 export async function analyzeScreenshot(file) {
   if (!VISION_URL) throw new Error('שירות הזיהוי טרם הוגדר (VITE_VISION_URL).')
   const imageBase64 = await fileToBase64(file)
