@@ -25,6 +25,7 @@ export default function App() {
   const [remoteResults, setRemoteResults] = useState([])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [market, setMarket] = useState('IL') // active tab: 'IL' | 'US'
+  const [filter, setFilter] = useState('') // filter the watched list by name/symbol
   const [importing, setImporting] = useState(false)
   const [importMsg, setImportMsg] = useState(null)
   const boxRef = useRef(null)
@@ -197,8 +198,13 @@ export default function App() {
     : '—'
 
   // Group rows by sector (banks, indices, ETFs…) in a fixed display order.
+  const f = filter.trim().toLowerCase()
+  const shownStocks = f
+    ? marketStocks.filter((s) => `${s.nameHe} ${s.symbol} ${s.subtitle || ''}`.toLowerCase().includes(f))
+    : marketStocks
+
   const grouped = {}
-  marketStocks.forEach((s) => {
+  shownStocks.forEach((s) => {
     ;(grouped[s.sector] ||= []).push(s)
   })
   const sectorsPresent = [
@@ -210,9 +216,14 @@ export default function App() {
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 20px 60px' }}>
       <header style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-            <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800 }}>KalStocks</h1>
-            <span style={{ color: 'var(--text-dim)', fontSize: 14 }}>הסבר עממי לתנודות בורסת תל אביב</span>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+              <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800 }}>KalStocks</h1>
+              <span style={{ color: 'var(--text-dim)', fontSize: 14 }}>הסבר עממי לתנודות בורסת תל אביב</span>
+            </div>
+            <p style={{ color: 'var(--text-dim)', fontSize: 12, margin: '5px 0 0' }}>
+              נתונים לצורכי מידע בלבד — אינם מהווים ייעוץ השקעות · המחירים מתעדכנים באיחור של כ־15 דקות.
+            </p>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
             {totalValue > 0 && (
@@ -233,9 +244,6 @@ export default function App() {
             </button>
           </div>
         </div>
-        <p style={{ color: 'var(--text-dim)', fontSize: 12, marginTop: 6 }}>
-          נתונים לצורכי מידע בלבד — אינם מהווים ייעוץ השקעות · המחירים מתעדכנים באיחור של כ־15 דקות.
-        </p>
       </header>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
@@ -366,9 +374,27 @@ export default function App() {
       </div>
       {importMsg && <div style={{ fontSize: 12.5, color: 'var(--text-dim)', marginBottom: 16 }}>{importMsg}</div>}
 
+      {marketStocks.length > 0 && (
+        <div style={{ position: 'relative', maxWidth: 320, marginBottom: 12 }}>
+          <input
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder='🔎 סנן ברשימה לפי שם או סמל…'
+            style={{ width: '100%', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 9, padding: '7px 12px', color: 'var(--text)', fontSize: 13.5 }}
+          />
+          {filter && (
+            <button onClick={() => setFilter('')} title="נקה" style={{ position: 'absolute', insetInlineEnd: 6, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 'none', color: 'var(--text-dim)', fontSize: 14, cursor: 'pointer' }}>✕</button>
+          )}
+        </div>
+      )}
+
       {marketStocks.length === 0 ? (
         <div style={{ color: 'var(--text-dim)', fontSize: 14, textAlign: 'center', padding: '40px 0' }}>
           {market === 'US' ? 'אין מניות אמריקאיות במעקב. חפש למעלה (למשל: אפל, נאסד"ק) כדי להוסיף.' : 'עדיין אין מניות במעקב. חפש למעלה או העלה צילום מסך כדי להתחיל.'}
+        </div>
+      ) : shownStocks.length === 0 ? (
+        <div style={{ color: 'var(--text-dim)', fontSize: 14, textAlign: 'center', padding: '24px 0' }}>
+          לא נמצאו מניות התואמות ל"{filter}".
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
