@@ -72,6 +72,30 @@ export default {
     try {
       const body = await request.json()
 
+      // Action: search Yahoo by name/ticker — finds any stock, not just the catalog.
+      if (body.action === 'search') {
+        const q = (body.query || '').trim()
+        if (q.length < 2) return json({ results: [] }, 200, origin)
+        try {
+          const r = await fetch(
+            `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=10&newsCount=0`,
+            { headers: { 'User-Agent': 'Mozilla/5.0 (KalStocks)' } },
+          )
+          const d = await r.json()
+          const results = (d.quotes || [])
+            .filter((x) => x.symbol && ['EQUITY', 'ETF', 'INDEX'].includes(x.quoteType))
+            .map((x) => ({
+              symbol: x.symbol,
+              name: x.shortname || x.longname || x.symbol,
+              exchange: x.exchange || '',
+              quoteType: x.quoteType,
+            }))
+          return json({ results }, 200, origin)
+        } catch (e) {
+          return json({ error: 'search failed', detail: String(e) }, 502, origin)
+        }
+      }
+
       // Action: live quote for a single symbol (instant load on manual add).
       if (body.action === 'quote') {
         if (!body.symbol) return json({ error: 'missing symbol' }, 400, origin)

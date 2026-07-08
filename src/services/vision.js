@@ -27,6 +27,22 @@ export async function quoteSymbol(symbol) {
   }
 }
 
+// Live Yahoo search by name/ticker → [{symbol, name, exchange, quoteType}]. Finds any stock.
+export async function searchYahoo(query) {
+  if (!VISION_URL || !query || query.trim().length < 2) return []
+  try {
+    const res = await fetch(VISION_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'search', query }),
+    })
+    const data = await res.json().catch(() => ({}))
+    return res.ok ? data.results || [] : []
+  } catch {
+    return []
+  }
+}
+
 export async function analyzeScreenshot(file) {
   if (!VISION_URL) throw new Error('שירות הזיהוי טרם הוגדר (VITE_VISION_URL).')
   const imageBase64 = await fileToBase64(file)

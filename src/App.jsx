@@ -4,7 +4,7 @@ import Settings from './components/Settings'
 import { searchCatalog, matchInstrument, kindLabel, sectorOf, SECTOR_ORDER } from './catalog'
 import { logoUrl, isFlag } from '../lib/logos'
 import { subscribeWatchlist, addToWatchlist, removeFromWatchlist, updateThreshold, updateQuantity, updatePrice } from './services/watchlist'
-import { analyzeScreenshot, quoteSymbol } from './services/vision'
+import { analyzeScreenshot, quoteSymbol, searchYahoo } from './services/vision'
 
 const fmtIls = (n) => (n ?? 0).toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 import { subscribeSnapshots } from './services/snapshots'
@@ -20,6 +20,7 @@ export default function App() {
   const [error, setError] = useState(null)
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
+  const [remoteResults, setRemoteResults] = useState([])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [market, setMarket] = useState('IL') // active tab: 'IL' | 'US'
   const [importing, setImporting] = useState(false)
@@ -49,11 +50,35 @@ export default function App() {
     return () => document.removeEventListener('mousedown', onDoc)
   }, [])
 
+  // Live Yahoo search (debounced) — finds any stock beyond the catalog.
+  useEffect(() => {
+    if (!open || q.trim().length < 2) {
+      setRemoteResults([])
+      return
+    }
+    const t = setTimeout(() => {
+      searchYahoo(q).then(setRemoteResults)
+    }, 300)
+    return () => clearTimeout(t)
+  }, [q, open])
+
   const owned = watchlist.map((w) => w.symbol)
   const results = open ? searchCatalog(q, { excludeSymbols: owned, market }) : []
   const rawTicker = q.trim().toUpperCase()
   const canAddRaw =
     q.trim().length > 0 && !results.some((r) => r.symbol === rawTicker) && !owned.includes(rawTicker)
+
+  const catalogSyms = new Set(results.map((r) => r.symbol))
+  const ownedSet = new Set(owned)
+  const remoteFiltered = remoteResults
+    .filter((r) => (market === 'US' ? !r.symbol.endsWith('.TA') : r.symbol.endsWith('.TA')))
+    .filter((r) => !ownedSet.has(r.symbol) && !catalogSyms.has(r.symbol))
+    .slice(0, 6)
+
+  const addRemote = (r) => {
+    const kind = r.quoteType === 'INDEX' ? 'index' : r.quoteType === 'ETF' ? 'etf' : 'equity'
+    add({ symbol: r.symbol, nameHe: r.name, priceSymbol: r.symbol, kind, market: r.symbol.endsWith('.TA') ? 'IL' : 'US' })
+  }
 
   const loadQuote = (priceSym) => {
     if (!priceSym) return
@@ -260,7 +285,7 @@ export default function App() {
             borderRadius: 10, padding: '11px 14px', color: 'var(--text)', fontSize: 15,
           }}
         />
-        {open && (results.length > 0 || canAddRaw) && (
+        {open && (results.length > 0 || remoteFiltered.length > 0 || canAddRaw) && (
           <div
             style={{
               position: 'absolute', top: '100%', insetInlineStart: 0, insetInlineEnd: 0, marginTop: 6,
@@ -286,8 +311,22 @@ export default function App() {
                   }}>{kindLabel(item.kind)}</span>
                 </span>
                 <span style={{ fontSize: 12, color: 'var(--text-dim)', direction: 'ltr' }}>
-                  {item.kind === 'etf' ? 'ת"א 35' : item.symbol}
+                  {item.kind === 'etf' && item.market !== 'US' ? 'ת"א 35' : item.symbol}
                 </span>
+              </button>
+            ))}
+            {remoteFiltered.map((r) => (
+              <button
+                key={r.symbol}
+                onClick={() => addRemote(r)}
+                style={{
+                  display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between',
+                  gap: 10, padding: '10px 14px', background: 'transparent', border: 'none',
+                  borderBottom: '1px solid var(--border)', color: 'var(--text)', textAlign: 'start',
+                }}
+              >
+                <span style={{ fontSize: 14, fontWeight: 500 }}>{r.name}</span>
+                <span style={{ fontSize: 12, color: 'var(--text-dim)', direction: 'ltr' }}>{r.symbol}</span>
               </button>
             ))}
             {canAddRaw && (

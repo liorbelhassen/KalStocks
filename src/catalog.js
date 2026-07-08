@@ -53,6 +53,12 @@ export const CATALOG = [
   { symbol: 'TSLA', nameHe: 'טסלה', kind: 'equity', priceSymbol: 'TSLA', market: 'US', aliases: ['tesla', 'רכב'] },
   { symbol: 'META', nameHe: 'מטא', kind: 'equity', priceSymbol: 'META', market: 'US', aliases: ['meta', 'facebook', 'פייסבוק'] },
   { symbol: 'MSTR', nameHe: 'מיקרוסטרטג\'י', kind: 'equity', priceSymbol: 'MSTR', market: 'US', aliases: ['microstrategy', 'strategy', 'ביטקוין'] },
+  { symbol: 'MU', nameHe: 'מיקרון', kind: 'equity', priceSymbol: 'MU', market: 'US', aliases: ['micron', 'שבבים', 'זיכרון'] },
+  { symbol: 'AMD', nameHe: 'AMD', kind: 'equity', priceSymbol: 'AMD', market: 'US', aliases: ['amd', 'שבבים'] },
+  { symbol: 'INTC', nameHe: 'אינטל', kind: 'equity', priceSymbol: 'INTC', market: 'US', aliases: ['intel', 'שבבים'] },
+  { symbol: 'NFLX', nameHe: 'נטפליקס', kind: 'equity', priceSymbol: 'NFLX', market: 'US', aliases: ['netflix'] },
+  { symbol: 'PLTR', nameHe: 'פלנטיר', kind: 'equity', priceSymbol: 'PLTR', market: 'US', aliases: ['palantir'] },
+  { symbol: 'DIS', nameHe: 'דיסני', kind: 'equity', priceSymbol: 'DIS', market: 'US', aliases: ['disney'] },
 ]
 
 const KIND_LABEL = { index: 'מדד', equity: 'מניה', etf: 'קרן סל' }
@@ -68,6 +74,7 @@ const SECTORS = {
   '^GSPC': 'מדדים', '^IXIC': 'מדדים', '^DJI': 'מדדים', 'SPY': 'קרנות סל', 'QQQ': 'קרנות סל',
   'AAPL': 'טכנולוגיה', 'MSFT': 'טכנולוגיה', 'GOOGL': 'טכנולוגיה', 'AMZN': 'טכנולוגיה', 'META': 'טכנולוגיה',
   'NVDA': 'שבבים', 'TSLA': 'רכב', 'MSTR': 'קריפטו',
+  'MU': 'שבבים', 'AMD': 'שבבים', 'INTC': 'שבבים', 'NFLX': 'טכנולוגיה', 'PLTR': 'טכנולוגיה', 'DIS': 'טכנולוגיה',
 }
 export const SECTOR_ORDER = ['מדדים', 'קרנות סל', 'בנקים', 'ביטוח', 'נדל"ן', 'טכנולוגיה', 'שבבים', 'רכב', 'קריפטו', 'פארמה', 'ביטחוניות', 'אנרגיה', 'כימיה', 'תקשורת', 'אחר']
 export function sectorOf(symbol) {
