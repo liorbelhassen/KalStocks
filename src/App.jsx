@@ -65,12 +65,20 @@ export default function App() {
     const exp = explanations[w.symbol]
     const brief = briefs[priceSym]
     const hhmm = (ms) => (ms ? new Date(ms).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '')
-    // Significant-event explanation takes priority; otherwise the morning brief is the baseline insight.
+    // Priority: significant-event AI explanation → morning AI brief → a data-derived baseline
+    // (so every instrument — indices included — always shows an insight, upgraded to AI when available).
+    const dataInsight = () => {
+      const c = snap?.changePct
+      if (c == null) return null
+      const noun = snap.isIndex ? 'המדד' : 'המניה'
+      const desc = Math.abs(c) < 0.3 ? 'נסחר סביב רמת הפתיחה, ללא שינוי מהותי' : `${c >= 0 ? 'עלה' : 'ירד'} ${Math.abs(c).toFixed(1)}% היום`
+      return { text: `${noun} ${desc}. תובנת AI מפורטת תתווסף בסקירת הבוקר או עם תנודה חריגה.`, confidence: null, sources: [], at: '', kind: 'data' }
+    }
     const insight = exp
       ? { text: exp.explanation, confidence: exp.confidence, sources: exp.sources || [], at: hhmm(exp.at), kind: 'event' }
       : brief
         ? { text: brief.assessment, confidence: brief.confidence, sources: brief.sources || [], at: hhmm(brief.at), kind: 'brief' }
-        : null
+        : dataInsight()
     return {
       key: w.symbol,
       symbol: w.symbol,

@@ -135,29 +135,35 @@ export default function StockTile({ stock, onRemove }) {
           }}
         >
           <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 4, color: 'var(--text-dim)' }}>
-            {stock.explanation.kind === 'event' ? '📊 הסבר לתנודה' : '☀️ סקירת בוקר'}
+            {stock.explanation.kind === 'event'
+              ? '📊 הסבר לתנודה'
+              : stock.explanation.kind === 'brief'
+                ? '☀️ סקירת בוקר'
+                : '📈 מצב נוכחי'}
           </div>
           <div>{stock.explanation.text}</div>
-          <div
-            style={{
-              marginTop: 8,
-              display: 'flex',
-              gap: 10,
-              flexWrap: 'wrap',
-              fontSize: 11.5,
-              color: 'var(--text-dim)',
-            }}
-          >
-            <span>ביטחון: {stock.explanation.confidence}</span>
-            <span>·</span>
-            <span>מקורות: {stock.explanation.sources.join(', ')}</span>
-            <span>·</span>
-            <span>{stock.explanation.at}</span>
-          </div>
+          {stock.explanation.confidence && (
+            <div
+              style={{
+                marginTop: 8,
+                display: 'flex',
+                gap: 10,
+                flexWrap: 'wrap',
+                fontSize: 11.5,
+                color: 'var(--text-dim)',
+              }}
+            >
+              <span>ביטחון: {stock.explanation.confidence}</span>
+              {stock.explanation.sources.length > 0 && <span>·</span>}
+              {stock.explanation.sources.length > 0 && <span>מקורות: {stock.explanation.sources.join(', ')}</span>}
+              {stock.explanation.at && <span>·</span>}
+              {stock.explanation.at && <span>{stock.explanation.at}</span>}
+            </div>
+          )}
         </div>
       ) : (
         <div style={{ fontSize: 12.5, color: 'var(--text-dim)', fontStyle: 'italic' }}>
-          אין תנודה חריגה שדורשת הסבר כרגע.
+          ממתין לנתונים…
         </div>
       )}
 
