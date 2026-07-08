@@ -11,3 +11,6 @@ dist
 serviceAccount*.json
 *service-account*.json
 *-firebase-adminsdk-*.json
+
+# Server-only API keys for local testing (Gemini/Telegram/Resend) — NEVER commit
+.secrets.env
