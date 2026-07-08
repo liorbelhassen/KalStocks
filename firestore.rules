@@ -10,6 +10,7 @@ service cloud.firestore {
     match /events/{doc}      { allow read: if true; allow write: if false; }
     match /explanations/{doc}{ allow read: if true; allow write: if false; }
     match /briefs/{doc}      { allow read: if true; allow write: if false; }
+    match /periods/{doc}     { allow read: if true; allow write: if false; }
     match /alerts_sent/{doc} { allow read: if false; allow write: if false; }
     match /usage/{doc}       { allow read: if false; allow write: if false; }
 

@@ -10,12 +10,14 @@ const fmtIls = (n) => (n ?? 0).toLocaleString('he-IL', { minimumFractionDigits: 
 import { subscribeSnapshots } from './services/snapshots'
 import { subscribeExplanations } from './services/explanations'
 import { subscribeBriefs } from './services/briefs'
+import { subscribePeriods } from './services/periods'
 
 export default function App() {
   const [watchlist, setWatchlist] = useState([])
   const [snapshots, setSnapshots] = useState({})
   const [explanations, setExplanations] = useState({})
   const [briefs, setBriefs] = useState({})
+  const [periods, setPeriods] = useState({}) // week/month data per priceSymbol (daily)
   const [liveQuotes, setLiveQuotes] = useState({}) // instant Worker quotes until the poller persists them
   const [error, setError] = useState(null)
   const [q, setQ] = useState('')
@@ -33,11 +35,13 @@ export default function App() {
     const unsubS = subscribeSnapshots(setSnapshots, (e) => setError(e.message))
     const unsubE = subscribeExplanations(setExplanations, (e) => setError(e.message))
     const unsubB = subscribeBriefs(setBriefs, (e) => setError(e.message))
+    const unsubP = subscribePeriods(setPeriods, (e) => setError(e.message))
     return () => {
       unsubW()
       unsubS()
       unsubE()
       unsubB()
+      unsubP()
     }
   }, [])
 
@@ -174,6 +178,7 @@ export default function App() {
       changePct: snap?.changePct,
       series: snap?.series || [],
       explanation: insight,
+      periods: periods[priceSym] || null,
     }
   })
 

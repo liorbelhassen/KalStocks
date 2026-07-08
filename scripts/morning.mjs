@@ -8,6 +8,8 @@ import { getFirestore } from 'firebase-admin/firestore'
 import { DateTime } from 'luxon'
 import { assessOpen, buildMorningHtml } from '../lib/morning.js'
 import { bumpUsage } from '../lib/usage.js'
+import { fetchSnapshot } from '../lib/yahoo.js'
+import { explainMove } from '../lib/explain.js'
 
 const TZ = 'Asia/Jerusalem'
 
@@ -70,6 +72,41 @@ async function main() {
     briefWrites++
   }
   await bumpUsage(db, dateStr, { geminiCalls, firestoreWrites: briefWrites })
+
+  // Once a day (morning): compute week/month period data + explanations → periods/{priceSymbol}.
+  if (session === 'morning') {
+    const priceSyms = new Set()
+    items.forEach((w) => {
+      if (w.kind !== 'other') priceSyms.add(w.priceSymbol || w.symbol)
+    })
+    const pchg = (snap) => {
+      const v = (snap.series || []).map((p) => p.v).filter((x) => x != null)
+      return v.length > 1 ? ((v[v.length - 1] - v[0]) / v[0]) * 100 : 0
+    }
+    let periodCalls = 0
+    for (const ps of priceSyms) {
+      try {
+        const repName = groups.get(ps)?.repName || ps
+        const wk = await fetchSnapshot(ps, { range: '5d', interval: '30m' })
+        const mo = await fetchSnapshot(ps, { range: '1mo', interval: '1d' })
+        const wkChg = pchg(wk)
+        const moChg = pchg(mo)
+        const wkExp = await explainMove({ nameHe: repName, symbol: ps, changePct: wkChg, direction: wkChg >= 0 ? 'up' : 'down', date: dateStr, period: 'week' }, geminiKey).catch(() => null)
+        const moExp = await explainMove({ nameHe: repName, symbol: ps, changePct: moChg, direction: moChg >= 0 ? 'up' : 'down', date: dateStr, period: 'month' }, geminiKey).catch(() => null)
+        periodCalls += 2
+        await db.collection('periods').doc(ps).set({
+          symbol: ps,
+          updatedAt: Date.now(),
+          week: { changePct: Math.round(wkChg * 100) / 100, series: wk.series || [], explanation: wkExp?.explanation || null, confidence: wkExp?.confidence || null, sources: wkExp?.sources || [] },
+          month: { changePct: Math.round(moChg * 100) / 100, series: mo.series || [], explanation: moExp?.explanation || null, confidence: moExp?.confidence || null, sources: moExp?.sources || [] },
+        })
+      } catch (e) {
+        console.warn(`period failed for ${ps}: ${e.message}`)
+      }
+    }
+    await bumpUsage(db, dateStr, { geminiCalls: periodCalls, firestoreWrites: priceSyms.size })
+    console.log(`Periods: updated ${priceSyms.size} symbols.`)
+  }
 
   const emailItems = items.map((w) => {
     const ps = w.priceSymbol || w.symbol
