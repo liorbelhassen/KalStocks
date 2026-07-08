@@ -1,11 +1,13 @@
 name: poll-prices
 
-# Free scheduler (replaces a Blaze Cloud Function). Cron is UTC; the window below
-# roughly covers TASE hours (Sun–Thu, 09:30–17:15 Israel = ~06:30–14:15 UTC in summer),
-# and scripts/poll.mjs double-checks Israel-time trading hours before writing.
+# Free scheduler (replaces a Blaze Cloud Function). Cron is UTC; the window 06–15 UTC
+# covers TASE hours (Sun–Thu, 09:30–17:15 Israel = 06:30–14:15 UTC in summer / +1h winter).
+# scripts/poll.mjs double-checks Israel-time trading hours before writing, so off-hours runs
+# exit immediately without touching Firestore. NOTE: GitHub scheduled crons are best-effort and
+# can be delayed several minutes under load — expect ~5–15 min freshness, not exact 5-min ticks.
 on:
   schedule:
-    - cron: '*/15 6-15 * * 0-4'
+    - cron: '*/5 6-15 * * 0-4'
   workflow_dispatch: {} # manual "Run workflow" button (also lets you force a poll)
 
 jobs:
