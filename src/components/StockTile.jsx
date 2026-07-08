@@ -110,16 +110,16 @@ export default function StockTile({ stock, onRemove, onQuantity, onPrice }) {
 
       {/* 4 · sub-tabs + period insight (flexible) */}
       <div style={{ flex: 1, minWidth: 210 }}>
-        <div style={{ display: 'flex', gap: 4, marginBottom: 5 }}>
+        <div style={{ display: 'inline-flex', gap: 3, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 9, padding: 3, marginBottom: 7 }}>
           {TABS.map(([t, lbl]) => (
             <button
               key={t}
               onClick={() => setTab(t)}
               style={{
-                background: tab === t ? 'var(--panel-2)' : 'transparent',
-                color: tab === t ? 'var(--text)' : 'var(--text-dim)',
-                border: '1px solid ' + (tab === t ? 'var(--border)' : 'transparent'),
-                borderRadius: 7, padding: '2px 10px', fontSize: 12, fontWeight: tab === t ? 700 : 400, cursor: 'pointer',
+                background: tab === t ? 'var(--accent)' : 'transparent',
+                color: tab === t ? '#fff' : 'var(--text-dim)',
+                border: 'none', borderRadius: 7, padding: '4px 14px', fontSize: 12.5,
+                fontWeight: 700, cursor: 'pointer', transition: 'background 0.12s',
               }}
             >
               {lbl}
