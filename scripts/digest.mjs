@@ -25,12 +25,14 @@ async function main() {
 
   // Watched instruments + their latest snapshots.
   const items = (await db.collection('watchlist').get()).docs.map((d) => d.data())
+  const kindBy = {}
+  items.forEach((w) => (kindBy[w.symbol] = w.kind))
   const snaps = {}
   ;(await db.collection('snapshots').get()).forEach((d) => (snaps[d.id] = d.data()))
 
   const all = items.map((w) => {
     const s = snaps[w.priceSymbol || w.symbol] || {}
-    return { symbol: w.symbol, nameHe: w.nameHe, priceIls: s.priceIls, changePct: s.changePct, isIndex: s.isIndex }
+    return { symbol: w.symbol, nameHe: w.nameHe, kind: w.kind, priceIls: s.priceIls, changePct: s.changePct, isIndex: s.isIndex }
   })
 
   // Today's significant movers, joined with their explanations.
@@ -42,6 +44,7 @@ async function main() {
     movers.push({
       symbol: ev.symbol,
       nameHe: ev.nameHe,
+      kind: kindBy[ev.symbol],
       changePct: ev.changePct,
       direction: ev.direction,
       explanation: exp?.explanation || 'טרם נוצר הסבר.',

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import StockTile from './components/StockTile'
 import Settings from './components/Settings'
 import { searchCatalog, kindLabel } from './catalog'
-import { logoUrl } from '../lib/logos'
+import { badgeFor } from '../lib/logos'
 import { subscribeWatchlist, addToWatchlist, removeFromWatchlist, updateThreshold } from './services/watchlist'
 import { subscribeSnapshots } from './services/snapshots'
 import { subscribeExplanations } from './services/explanations'
@@ -61,13 +61,13 @@ export default function App() {
       key: w.symbol,
       symbol: w.symbol,
       nameHe: w.nameHe,
-      logo: logoUrl(w.symbol),
+      badge: badgeFor(w.symbol, w.nameHe, { kind: w.kind, isIndex: snap?.isIndex }),
       note: w.kind === 'etf' ? 'מתומחר לפי מדד ת"א 35' : null,
       thresholdPct: w.thresholdPct,
       isIndex: snap?.isIndex,
       priceIls: snap?.priceIls,
       changePct: snap?.changePct,
-      spark: (snap?.series || []).map((p) => p.v),
+      series: snap?.series || [],
       explanation: exp
         ? {
             text: exp.explanation,
@@ -78,6 +78,13 @@ export default function App() {
         : null,
     }
   })
+
+  const lastUpdatedMs = Math.max(0, ...Object.values(snapshots).map((s) => s.updatedAt || 0))
+  const lastUpdatedLabel = lastUpdatedMs
+    ? new Date(lastUpdatedMs).toLocaleString('he-IL', {
+        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+      })
+    : '—'
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 20px 60px' }}>
@@ -190,6 +197,10 @@ export default function App() {
           ))}
         </section>
       )}
+
+      <footer style={{ marginTop: 28, textAlign: 'start', color: 'var(--text-dim)', fontSize: 11.5 }}>
+        עודכן לאחרונה: {lastUpdatedLabel} · המחירים מתרעננים אוטומטית כל ~5 דקות בשעות המסחר.
+      </footer>
     </div>
   )
 }

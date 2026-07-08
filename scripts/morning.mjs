@@ -57,6 +57,7 @@ async function main() {
     return {
       symbol: w.symbol,
       nameHe: w.nameHe,
+      kind: w.kind,
       isIndex: snaps[ps]?.isIndex,
       priceIls: snaps[ps]?.priceIls,
       assessment: a.assessment || 'לא נמצאה הערכה.',

@@ -3,12 +3,32 @@ import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts'
 const fmt = (n) =>
   n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+const tFmt = (t) => new Date(t).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
+
+function Badge({ badge }) {
+  if (!badge) return null
+  if (badge.type === 'flag') return <span style={{ fontSize: 20, flexShrink: 0 }}>{badge.char}</span>
+  return (
+    <span
+      style={{
+        width: 22, height: 22, borderRadius: 5, background: badge.color, color: '#fff',
+        fontSize: 13, fontWeight: 700, display: 'inline-flex', alignItems: 'center',
+        justifyContent: 'center', flexShrink: 0,
+      }}
+    >
+      {badge.char}
+    </span>
+  )
+}
+
 export default function StockTile({ stock, onRemove }) {
   const hasData = stock.priceIls != null
   const up = (stock.changePct ?? 0) >= 0
   const color = up ? 'var(--up)' : 'var(--down)'
   const bg = up ? 'var(--up-bg)' : 'var(--down-bg)'
-  const sparkData = (stock.spark || []).map((v, i) => ({ i, v }))
+  const series = stock.series || []
+  const sparkData = series.map((p, i) => ({ i, v: p.v }))
+  const timeRange = series.length > 1 ? `היום · ${tFmt(series[0].t)}–${tFmt(series[series.length - 1].t)}` : null
 
   return (
     <div
@@ -25,16 +45,7 @@ export default function StockTile({ stock, onRemove }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <div style={{ fontSize: 17, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
-            {stock.logo && (
-              <img
-                src={stock.logo}
-                alt=""
-                width={22}
-                height={22}
-                style={{ borderRadius: 5, background: '#fff', flexShrink: 0 }}
-                onError={(e) => { e.currentTarget.style.display = 'none' }}
-              />
-            )}
+            <Badge badge={stock.badge} />
             <span>{stock.nameHe}</span>
           </div>
           {stock.note ? (
@@ -88,13 +99,22 @@ export default function StockTile({ stock, onRemove }) {
       </div>
 
       {hasData ? (
-        <div style={{ height: 44 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={sparkData}>
-              <YAxis domain={['dataMin', 'dataMax']} hide />
-              <Line type="monotone" dataKey="v" stroke={color} strokeWidth={2} dot={false} isAnimationActive={false} />
-            </LineChart>
-          </ResponsiveContainer>
+        <div>
+          <div style={{ height: 44 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={sparkData}>
+                <YAxis domain={['dataMin', 'dataMax']} hide />
+                <Line type="monotone" dataKey="v" stroke={color} strokeWidth={2} dot={false} isAnimationActive={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          {timeRange && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: 'var(--text-dim)', direction: 'ltr', marginTop: 2 }}>
+              <span>{series.length > 1 ? tFmt(series[0].t) : ''}</span>
+              <span>{timeRange}</span>
+              <span>{series.length > 1 ? tFmt(series[series.length - 1].t) : ''}</span>
+            </div>
+          )}
         </div>
       ) : (
         <div style={{ height: 44, display: 'flex', alignItems: 'center', color: 'var(--text-dim)', fontSize: 12.5 }}>
