@@ -1,9 +1,10 @@
 name: morning-brief
 
-# 09:00 Israel time, Sun–Thu, before market open (09:00 IDT = 06:00 UTC).
+# Dashboard AI insight refresh twice a day (Israel): ~09:00 morning brief (+email) and
+# ~13:00 midday update (dashboard only). 09:00 IDT = 06:00 UTC, 13:00 IDT = 10:00 UTC.
 on:
   schedule:
-    - cron: '0 6 * * 0-4'
+    - cron: '0 6,10 * * 0-4'
   workflow_dispatch: {}
 
 jobs:

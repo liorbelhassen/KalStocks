@@ -27,6 +27,7 @@ async function main() {
   const now = DateTime.now().setZone(TZ)
   const dateStr = now.toISODate()
   const dateHe = now.setLocale('he').toFormat('cccc, d LLLL yyyy')
+  const session = now.hour < 12 ? 'morning' : 'midday' // morning run (~09:00) vs midday run (~13:00)
 
   const items = (await db.collection('watchlist').get()).docs.map((d) => d.data())
   const snaps = {}
@@ -46,7 +47,7 @@ async function main() {
     try {
       geminiCalls++
       assessments[g.priceSymbol] = await assessOpen(
-        { nameHe: g.repName, symbol: g.priceSymbol, date: dateStr, isIndex: !!g.isIndex },
+        { nameHe: g.repName, symbol: g.priceSymbol, date: dateStr, isIndex: !!g.isIndex, session },
         geminiKey,
       )
     } catch (e) {
@@ -59,6 +60,7 @@ async function main() {
     await db.collection('briefs').doc(`${ps}__${dateStr}`).set({
       priceSymbol: ps,
       date: dateStr,
+      session,
       assessment: a.assessment,
       sentiment: a.sentiment,
       confidence: a.confidence,
@@ -85,7 +87,13 @@ async function main() {
     }
   })
 
-  const html = buildMorningHtml({ dateStr: dateHe, items: emailItems })
+  // The midday run refreshes the dashboard insight only — no email (the 13:00 digest covers email).
+  if (session !== 'morning') {
+    console.log(`Midday brief: refreshed ${briefWrites} dashboard insights (no email).`)
+    return
+  }
+
+  const html = buildMorningHtml({ dateStr: dateHe, items: emailItems, session })
 
   const apiKey = process.env.RESEND_API_KEY
   const to = process.env.DIGEST_TO

@@ -161,7 +161,9 @@ export default function StockTile({ stock, onRemove, onQuantity }) {
             {stock.explanation.kind === 'event'
               ? '📊 הסבר לתנודה'
               : stock.explanation.kind === 'brief'
-                ? '☀️ סקירת בוקר'
+                ? stock.explanation.session === 'midday'
+                  ? '🕐 עדכון צהריים'
+                  : '☀️ סקירת בוקר'
                 : '📈 מצב נוכחי'}
           </div>
           <div>{stock.explanation.text}</div>
