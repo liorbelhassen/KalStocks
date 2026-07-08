@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "poll": "node scripts/poll.mjs",
-    "digest": "node scripts/digest.mjs"
+    "digest": "node scripts/digest.mjs",
+    "morning": "node scripts/morning.mjs"
   },
   "dependencies": {
     "firebase": "^12.11.0",

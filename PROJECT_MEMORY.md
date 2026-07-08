@@ -103,6 +103,12 @@ Single-user MVP now, but designed so multi-tenant SaaS is an extension, not a re
   cron twice daily (10:00 & 15:00 UTC = ~13:00 & 18:00 IDT, Sun–Thu). Verified: HTML builder + Firestore
   read (dry run). Pending from user: `RESEND_API_KEY` + `DIGEST_TO` (Resend signup email; free-tier
   sender `onboarding@resend.dev` can only send to that address) — locally in `.secrets.env` + GitHub secrets.
+- [x] **6b — Morning pre-market brief (09:00 IDT):** `lib/morning.js` (`assessOpen` — Gemini +
+  grounding researches overnight/global news → plain-Hebrew "how it may open" + sentiment) +
+  `scripts/morning.mjs` + `.github/workflows/morning.yml` (cron 06:00 UTC Sun–Thu). Framed as
+  assessment, not prediction/advice. Verified live. Needs RESEND_API_KEY + DIGEST_TO to send.
+- Note: LLM responses parsed via **labeled lines** (ביטחון:/הסבר:/סנטימנט:/הערכה:), NOT JSON —
+  Hebrew gershayim (ארה"ב, ת"א) break JSON strings. Applies to `explain.js` + `morning.js`.
 - [ ] **7 — Polish:** honest framing, disclaimers, error handling.
 
 ## 7. Notes
