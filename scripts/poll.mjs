@@ -9,6 +9,7 @@ import { initializeApp, cert, applicationDefault } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 import { DateTime } from 'luxon'
 import { fetchSnapshots } from '../lib/yahoo.js'
+import { classify } from '../lib/volatility.js'
 
 const TZ = 'Asia/Jerusalem'
 
@@ -35,14 +36,16 @@ async function main() {
 
   const db = getFirestore(initApp())
 
-  const wl = await db.collection('watchlist').get()
-  const symbols = new Set(['TA35.TA'])
-  wl.forEach((d) => {
-    const p = d.get('priceSymbol') || d.get('symbol')
-    if (p) symbols.add(p) // ETFs share the TA35.TA proxy — Set dedupes automatically
+  const items = (await db.collection('watchlist').get()).docs.map((d) => ({ id: d.id, ...d.data() }))
+  const priceSymbols = new Set(['TA35.TA'])
+  items.forEach((it) => {
+    const p = it.priceSymbol || it.symbol
+    if (p) priceSymbols.add(p) // ETFs share the TA35.TA proxy — Set dedupes automatically
   })
 
-  const snapshots = await fetchSnapshots([...symbols])
+  // 1) Fetch + store snapshots.
+  const snapshots = await fetchSnapshots([...priceSymbols])
+  const byPrice = {}
   const batch = db.batch()
   let ok = 0
   for (const snap of snapshots) {
@@ -50,12 +53,51 @@ async function main() {
       console.warn(`skip ${snap.symbol}: ${snap.error}`)
       continue
     }
+    byPrice[snap.symbol] = snap
     batch.set(db.collection('snapshots').doc(snap.symbol), { ...snap, updatedAt: Date.now() }, { merge: true })
     ok++
   }
   await batch.commit()
   console.log(`Polled ${ok}/${snapshots.length} symbols → snapshots.`)
-  // TODO Phase 3: volatility detection → events; Phase 4: explanations.
+
+  // 2) Phase 3 — volatility detection → events.
+  // One event doc per (instrument, trading day). Re-flag needsExplanation only when the move grows
+  // into a higher band, so Phase 4 explains a fresh/worsening move but not every 15-min tick.
+  const dateStr = DateTime.now().setZone(TZ).toISODate()
+  let flagged = 0
+  for (const it of items) {
+    const snap = byPrice[it.priceSymbol || it.symbol]
+    if (!snap) continue
+    const thr = it.thresholdPct || 3
+    const c = classify(snap, thr)
+    if (!c.significant) continue
+
+    const ref = db.collection('events').doc(`${it.symbol}__${dateStr}`)
+    const existing = await ref.get()
+    const prevBand = existing.exists ? existing.get('band') || 0 : 0
+    const fresh = !existing.exists || c.band > prevBand
+
+    await ref.set(
+      {
+        symbol: it.symbol,
+        nameHe: it.nameHe || it.symbol,
+        priceSymbol: it.priceSymbol || it.symbol,
+        date: dateStr,
+        at: Date.now(),
+        changePct: c.change,
+        direction: c.direction,
+        swingPct: Math.round(c.swingPct * 100) / 100,
+        band: Math.max(c.band, prevBand),
+        reason: c.reason,
+        thresholdPct: thr,
+        ...(fresh ? { needsExplanation: true } : {}),
+      },
+      { merge: true },
+    )
+    if (fresh) flagged++
+  }
+  console.log(`Volatility: ${flagged} new/worsening event(s) flagged for explanation.`)
+  // TODO Phase 4: read events where needsExplanation==true → generate explanation → clear flag.
 }
 
 main().then(() => process.exit(0)).catch((e) => {

@@ -87,7 +87,9 @@ Single-user MVP now, but designed so multi-tenant SaaS is an extension, not a re
   **ETF proxy:** watchlist docs carry `priceSymbol` (+ `kind`); ETFs set `priceSymbol=TA35.TA` and the
   poller polls unique `priceSymbol`s. Pending: per-symbol threshold editing UI (defaults to 3%).
   Git repo initialized (branch `main`, first commit); not yet pushed to GitHub.
-- [ ] **3 — Volatility detection:** thresholds + intraday swings → `events` (inside `scripts/poll.mjs`).
+- [x] **3 — Volatility detection:** `lib/volatility.js` `classify()` (daily-move OR intraday-swing);
+  poller upserts one `events` doc per (instrument, day), sets `needsExplanation` on new/worsening
+  (higher band) moves so Phase 4 explains fresh moves, not every tick. Unit-tested.
 - [ ] **4 — Explanation engine:** LLM + web search → Hebrew explanation + sources + confidence.
   Claude API is paid → evaluate a free alternative (Gemini free tier) first.
 - [ ] **5 — Telegram push:** bot, per-stock opt-in, dedup via `alerts_sent` (free).
