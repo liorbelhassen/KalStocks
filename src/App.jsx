@@ -3,8 +3,6 @@ import StockTile from './components/StockTile'
 import Settings from './components/Settings'
 import { searchCatalog, kindLabel } from './catalog'
 import { logoUrl, isFlag } from '../lib/logos'
-
-const LOGO_TOKEN = import.meta.env.VITE_LOGO_TOKEN
 import { subscribeWatchlist, addToWatchlist, removeFromWatchlist, updateThreshold } from './services/watchlist'
 import { subscribeSnapshots } from './services/snapshots'
 import { subscribeExplanations } from './services/explanations'
@@ -85,7 +83,7 @@ export default function App() {
       nameHe: w.nameHe,
       badge: isFlag(w.symbol, { kind: w.kind, isIndex: snap?.isIndex })
         ? { flag: true }
-        : { logo: logoUrl(w.symbol, LOGO_TOKEN) },
+        : { logo: logoUrl(w.symbol) },
       note: w.kind === 'etf' ? 'מתומחר לפי מדד ת"א 35' : null,
       thresholdPct: w.thresholdPct,
       isIndex: snap?.isIndex,

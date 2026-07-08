@@ -55,7 +55,7 @@ async function main() {
   }
   movers.sort((a, b) => Math.abs(b.changePct ?? 0) - Math.abs(a.changePct ?? 0))
 
-  const html = buildDigestHtml({ dateStr: dateHe, timeLabel, movers, all, logoToken: process.env.LOGO_TOKEN })
+  const html = buildDigestHtml({ dateStr: dateHe, timeLabel, movers, all })
 
   const apiKey = process.env.RESEND_API_KEY
   const to = process.env.DIGEST_TO

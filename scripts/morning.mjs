@@ -85,7 +85,7 @@ async function main() {
     }
   })
 
-  const html = buildMorningHtml({ dateStr: dateHe, items: emailItems, logoToken: process.env.LOGO_TOKEN })
+  const html = buildMorningHtml({ dateStr: dateHe, items: emailItems })
 
   const apiKey = process.env.RESEND_API_KEY
   const to = process.env.DIGEST_TO
