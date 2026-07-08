@@ -52,13 +52,10 @@ export default function App() {
 
   // Live Yahoo search (debounced) — finds any stock beyond the catalog.
   useEffect(() => {
-    if (!open || q.trim().length < 2) {
-      setRemoteResults([])
-      return
-    }
     const t = setTimeout(() => {
-      searchYahoo(q).then(setRemoteResults)
-    }, 300)
+      if (!open || q.trim().length < 2) setRemoteResults([])
+      else searchYahoo(q).then(setRemoteResults)
+    }, 250)
     return () => clearTimeout(t)
   }, [q, open])
 
