@@ -29,6 +29,7 @@ async function pollPrices(env) {
   const wl = await listDocs(token, sa.project_id, 'watchlist')
   const symbols = new Set(['TA35.TA'])
   wl.forEach((w) => {
+    if (w.kind === 'other') return // manual-price stocks aren't on Yahoo
     const p = w.priceSymbol || w.symbol
     if (p) symbols.add(p)
   })

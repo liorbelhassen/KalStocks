@@ -44,6 +44,7 @@ async function main() {
   const items = (await db.collection('watchlist').get()).docs.map((d) => ({ id: d.id, ...d.data() }))
   const priceSymbols = new Set(['TA35.TA'])
   items.forEach((it) => {
+    if (it.kind === 'other') return // manual-price stocks aren't on Yahoo — don't fetch
     const p = it.priceSymbol || it.symbol
     if (p) priceSymbols.add(p) // ETFs share the TA35.TA proxy — Set dedupes automatically
   })
