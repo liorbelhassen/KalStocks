@@ -66,7 +66,7 @@ export default function StockTile({ stock, onRemove, onQuantity, onPrice }) {
     <div
       style={{
         background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 10,
-        padding: '9px 14px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+        padding: '11px 14px', display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap',
       }}
     >
       {/* 1 · identity */}
@@ -115,9 +115,7 @@ export default function StockTile({ stock, onRemove, onQuantity, onPrice }) {
         {stock.explanation ? (
           <>
             <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-dim)' }}>{label}</div>
-            <div style={{ fontSize: 12.5, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-              {stock.explanation.text}
-            </div>
+            <div style={{ fontSize: 12.5, lineHeight: 1.5 }}>{stock.explanation.text}</div>
             {stock.explanation.confidence && (
               <div style={{ fontSize: 10.5, color: 'var(--text-dim)', marginTop: 1 }}>
                 ביטחון: {stock.explanation.confidence}
