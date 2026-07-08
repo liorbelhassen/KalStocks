@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "poll": "node scripts/poll.mjs"
+    "poll": "node scripts/poll.mjs",
+    "digest": "node scripts/digest.mjs"
   },
   "dependencies": {
     "firebase": "^12.11.0",

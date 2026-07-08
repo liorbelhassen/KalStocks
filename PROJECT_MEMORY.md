@@ -98,7 +98,11 @@ Single-user MVP now, but designed so multi-tenant SaaS is an extension, not a re
   next poll). Dashboard subscribes + shows on tiles. Verified end-to-end. NOTE: cloud poller needs
   `GEMINI_API_KEY` GitHub secret, else it skips explanations gracefully.
 - [ ] **5 — Telegram push:** bot, per-stock opt-in, dedup via `alerts_sent` (free).
-- [ ] **6 — Email digest:** twice daily via Resend (free tier).
+- [x] **6 — Email digest:** `lib/digest.js` (pure RTL-Hebrew HTML builder) + `scripts/digest.mjs`
+  (reads today's snapshots/events/explanations, sends via Resend REST). `.github/workflows/digest.yml`
+  cron twice daily (10:00 & 15:00 UTC = ~13:00 & 18:00 IDT, Sun–Thu). Verified: HTML builder + Firestore
+  read (dry run). Pending from user: `RESEND_API_KEY` + `DIGEST_TO` (Resend signup email; free-tier
+  sender `onboarding@resend.dev` can only send to that address) — locally in `.secrets.env` + GitHub secrets.
 - [ ] **7 — Polish:** honest framing, disclaimers, error handling.
 
 ## 7. Notes
