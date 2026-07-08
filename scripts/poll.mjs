@@ -10,6 +10,7 @@ import { getFirestore } from 'firebase-admin/firestore'
 import { DateTime } from 'luxon'
 import { fetchSnapshots } from '../lib/yahoo.js'
 import { classify } from '../lib/volatility.js'
+import { explainMove } from '../lib/explain.js'
 
 const TZ = 'Asia/Jerusalem'
 
@@ -97,7 +98,38 @@ async function main() {
     if (fresh) flagged++
   }
   console.log(`Volatility: ${flagged} new/worsening event(s) flagged for explanation.`)
-  // TODO Phase 4: read events where needsExplanation==true → generate explanation → clear flag.
+
+  // 3) Phase 4 — generate explanations for flagged events (Gemini + Google Search grounding).
+  const geminiKey = process.env.GEMINI_API_KEY
+  if (!geminiKey) {
+    console.log('GEMINI_API_KEY not set — skipping explanations.')
+    return
+  }
+  const pending = await db.collection('events').where('needsExplanation', '==', true).get()
+  let explained = 0
+  for (const d of pending.docs) {
+    const ev = d.data()
+    try {
+      const r = await explainMove(ev, geminiKey)
+      await db.collection('explanations').doc(d.id).set({
+        symbol: ev.symbol,
+        nameHe: ev.nameHe,
+        date: ev.date,
+        changePct: ev.changePct,
+        direction: ev.direction,
+        explanation: r.explanation,
+        confidence: r.confidence,
+        sources: r.sources,
+        model: r.model,
+        at: Date.now(),
+      })
+      await d.ref.update({ needsExplanation: false, explainedAt: Date.now() })
+      explained++
+    } catch (e) {
+      console.warn(`explain failed for ${d.id}: ${e.message}`)
+    }
+  }
+  console.log(`Explanations: generated ${explained}.`)
 }
 
 main().then(() => process.exit(0)).catch((e) => {

@@ -3,10 +3,12 @@ import StockTile from './components/StockTile'
 import { searchCatalog, kindLabel } from './catalog'
 import { subscribeWatchlist, addToWatchlist, removeFromWatchlist } from './services/watchlist'
 import { subscribeSnapshots } from './services/snapshots'
+import { subscribeExplanations } from './services/explanations'
 
 export default function App() {
   const [watchlist, setWatchlist] = useState([])
   const [snapshots, setSnapshots] = useState({})
+  const [explanations, setExplanations] = useState({})
   const [error, setError] = useState(null)
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
@@ -15,9 +17,11 @@ export default function App() {
   useEffect(() => {
     const unsubW = subscribeWatchlist(setWatchlist, (e) => setError(e.message))
     const unsubS = subscribeSnapshots(setSnapshots, (e) => setError(e.message))
+    const unsubE = subscribeExplanations(setExplanations, (e) => setError(e.message))
     return () => {
       unsubW()
       unsubS()
+      unsubE()
     }
   }, [])
 
@@ -49,6 +53,7 @@ export default function App() {
   const stocks = watchlist.map((w) => {
     const priceSym = w.priceSymbol || w.symbol
     const snap = snapshots[priceSym]
+    const exp = explanations[w.symbol]
     return {
       key: w.symbol,
       symbol: w.symbol,
@@ -58,7 +63,14 @@ export default function App() {
       priceIls: snap?.priceIls,
       changePct: snap?.changePct,
       spark: (snap?.series || []).map((p) => p.v),
-      explanation: null, // Phase 4
+      explanation: exp
+        ? {
+            text: exp.explanation,
+            confidence: exp.confidence,
+            sources: exp.sources || [],
+            at: exp.at ? new Date(exp.at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '',
+          }
+        : null,
     }
   })
 

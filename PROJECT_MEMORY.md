@@ -23,8 +23,9 @@ Framing: every explanation carries a confidence level, cites sources, and is lab
   wants everything free. Firebase is used only for **Firestore + Hosting + Auth** (all free on Spark).
 - **Data:** Firestore (Spark free tier: 20k writes/day; poller does ~300/day).
 - **Email:** Resend (free tier). **Time math:** luxon (`Asia/Jerusalem`).
-- **AI (Phase 4):** originally Anthropic Claude API + web search, but the Claude API is PAID → need a
-  free alternative (e.g. Google Gemini free tier). Decide when Phase 4 starts.
+- **AI (Phase 4):** Google **Gemini** (`gemini-2.5-flash`) with **Google Search grounding** — free tier,
+  scans global news and explains in Hebrew with real sources. Chosen over paid Claude API. Key:
+  `GEMINI_API_KEY` (local `.secrets.env`; add as GitHub secret for the cloud poller).
 - No TypeScript, no test suite (matches the user's other projects).
 - **Auth to write Firestore from the poller:** a Firebase **service account key** — kept local as
   `serviceAccount.json` (gitignored) for one-off runs, and stored as the GitHub secret
@@ -90,8 +91,11 @@ Single-user MVP now, but designed so multi-tenant SaaS is an extension, not a re
 - [x] **3 — Volatility detection:** `lib/volatility.js` `classify()` (daily-move OR intraday-swing);
   poller upserts one `events` doc per (instrument, day), sets `needsExplanation` on new/worsening
   (higher band) moves so Phase 4 explains fresh moves, not every tick. Unit-tested.
-- [ ] **4 — Explanation engine:** LLM + web search → Hebrew explanation + sources + confidence.
-  Claude API is paid → evaluate a free alternative (Gemini free tier) first.
+- [x] **4 — Explanation engine:** `lib/explain.js` — Gemini + Google Search grounding → Hebrew
+  explanation + sources + confidence. Poller explains events with `needsExplanation`, writes
+  `explanations` (keyed by eventId = symbol__date), clears the flag (self-heals on transient fail
+  next poll). Dashboard subscribes + shows on tiles. Verified end-to-end. NOTE: cloud poller needs
+  `GEMINI_API_KEY` GitHub secret, else it skips explanations gracefully.
 - [ ] **5 — Telegram push:** bot, per-stock opt-in, dedup via `alerts_sent` (free).
 - [ ] **6 — Email digest:** twice daily via Resend (free tier).
 - [ ] **7 — Polish:** honest framing, disclaimers, error handling.
