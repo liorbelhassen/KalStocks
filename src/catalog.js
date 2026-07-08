@@ -43,6 +43,19 @@ export const CATALOG = [
 const KIND_LABEL = { index: 'מדד', equity: 'מניה', etf: 'קרן סל' }
 export const kindLabel = (k) => KIND_LABEL[k] || ''
 
+// Sector per instrument, for grouping the dashboard by category.
+const SECTORS = {
+  'TA35.TA': 'מדדים',
+  'POLI.TA': 'בנקים', 'LUMI.TA': 'בנקים', 'MZTF.TA': 'בנקים', 'DSCT.TA': 'בנקים', 'FIBI.TA': 'בנקים',
+  'TEVA.TA': 'פארמה', 'NICE.TA': 'טכנולוגיה', 'ESLT.TA': 'ביטחוניות', 'ICL.TA': 'כימיה',
+  'BEZQ.TA': 'תקשורת', 'TSEM.TA': 'שבבים', 'NVMI.TA': 'שבבים', 'ENOG.TA': 'אנרגיה', 'AZRG.TA': 'נדל"ן',
+}
+export const SECTOR_ORDER = ['מדדים', 'קרנות סל', 'בנקים', 'ביטוח', 'נדל"ן', 'טכנולוגיה', 'שבבים', 'פארמה', 'ביטחוניות', 'אנרגיה', 'כימיה', 'תקשורת', 'אחר']
+export function sectorOf(symbol) {
+  if ((symbol || '').startsWith('ETF-')) return 'קרנות סל'
+  return SECTORS[symbol] || 'אחר'
+}
+
 // Normalize for matching: lowercase, strip quotes/dashes/dots/parens/spaces so "ת\"א 35",
 // "תא 35", "קסם.תא 35", "תא35" and "35" all match consistently.
 const norm = (s) => (s || '').toLowerCase().replace(/["'`״׳().[\]/\\\-\s]/g, '')

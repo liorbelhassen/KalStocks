@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import StockTile from './components/StockTile'
 import Settings from './components/Settings'
-import { searchCatalog, matchInstrument, kindLabel } from './catalog'
+import { searchCatalog, matchInstrument, kindLabel, sectorOf, SECTOR_ORDER } from './catalog'
 import { logoUrl, isFlag } from '../lib/logos'
 import { subscribeWatchlist, addToWatchlist, removeFromWatchlist, updateThreshold, updateQuantity, updatePrice } from './services/watchlist'
 import { analyzeScreenshot, quoteSymbol } from './services/vision'
@@ -134,6 +134,7 @@ export default function App() {
       note: isEtf ? 'עוקב אחרי מדד ת"א 35 · הזן מחיר קרן לחישוב שווי' : null,
       thresholdPct: w.thresholdPct,
       quantity: w.quantity,
+      sector: sectorOf(w.symbol),
       etf: isEtf,
       manualPrice: w.manualPrice,
       isIndex: isEtf ? false : snap?.isIndex,
@@ -155,6 +156,16 @@ export default function App() {
         day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
       })
     : '—'
+
+  // Group rows by sector (banks, indices, ETFs…) in a fixed display order.
+  const grouped = {}
+  stocks.forEach((s) => {
+    ;(grouped[s.sector] ||= []).push(s)
+  })
+  const sectorsPresent = [
+    ...SECTOR_ORDER.filter((sec) => grouped[sec]?.length),
+    ...Object.keys(grouped).filter((sec) => !SECTOR_ORDER.includes(sec)),
+  ]
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 20px 60px' }}>
@@ -207,8 +218,9 @@ export default function App() {
         </div>
       )}
 
-      {/* Autocomplete search */}
-      <div ref={boxRef} style={{ position: 'relative', marginBottom: 24, maxWidth: 520 }}>
+      {/* Search + upload, side by side */}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'stretch', marginBottom: 8, maxWidth: 760, flexWrap: 'wrap' }}>
+      <div ref={boxRef} style={{ position: 'relative', flex: 1, minWidth: 240 }}>
         <input
           value={q}
           onChange={(e) => { setQ(e.target.value); setOpen(true) }}
@@ -264,37 +276,51 @@ export default function App() {
         )}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 22, flexWrap: 'wrap' }}>
         <input ref={fileRef} type="file" accept="image/*" onChange={onUpload} style={{ display: 'none' }} />
         <button
           onClick={() => fileRef.current?.click()}
           disabled={importing}
+          title="העלה צילום מסך של התיק מאפליקציית הברוקר — נזהה אוטומטית את המניות והכמויות"
           style={{
-            background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 10,
-            padding: '9px 14px', color: 'var(--text)', fontSize: 13.5, opacity: importing ? 0.6 : 1,
+            display: 'flex', alignItems: 'center', gap: 9, background: 'var(--accent)', border: 'none',
+            borderRadius: 10, padding: '0 18px', color: '#fff', fontSize: 14, fontWeight: 600,
+            whiteSpace: 'nowrap', cursor: importing ? 'default' : 'pointer', opacity: importing ? 0.6 : 1,
           }}
         >
-          📷 העלה צילום מסך של התיק
+          <span style={{ fontSize: 19, lineHeight: 1 }}>📷</span>
+          <span style={{ textAlign: 'start', lineHeight: 1.15 }}>
+            {importing ? 'מזהה תיק…' : 'העלה תיק מצילום'}
+            {!importing && <><br /><span style={{ fontSize: 10.5, fontWeight: 400, opacity: 0.85 }}>זיהוי מניות אוטומטי</span></>}
+          </span>
         </button>
-        {importMsg && <span style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>{importMsg}</span>}
       </div>
+      {importMsg && <div style={{ fontSize: 12.5, color: 'var(--text-dim)', marginBottom: 16 }}>{importMsg}</div>}
 
       {stocks.length === 0 ? (
         <div style={{ color: 'var(--text-dim)', fontSize: 14, textAlign: 'center', padding: '40px 0' }}>
           עדיין אין מניות במעקב. חפש למעלה או העלה צילום מסך כדי להתחיל.
         </div>
       ) : (
-        <section style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {stocks.map((s) => (
-            <StockTile
-              key={s.key}
-              stock={s}
-              onRemove={() => removeFromWatchlist(s.symbol)}
-              onQuantity={(q) => updateQuantity(s.symbol, q).catch((e) => setError(e.message))}
-              onPrice={(p) => updatePrice(s.symbol, p).catch((e) => setError(e.message))}
-            />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {sectorsPresent.map((sec) => (
+            <section key={sec}>
+              <h3 style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 700, color: 'var(--text-dim)', borderBottom: '1px solid var(--border)', paddingBottom: 5 }}>
+                {sec} <span style={{ fontWeight: 400, opacity: 0.7 }}>· {grouped[sec].length}</span>
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {grouped[sec].map((s) => (
+                  <StockTile
+                    key={s.key}
+                    stock={s}
+                    onRemove={() => removeFromWatchlist(s.symbol)}
+                    onQuantity={(qty) => updateQuantity(s.symbol, qty).catch((e) => setError(e.message))}
+                    onPrice={(p) => updatePrice(s.symbol, p).catch((e) => setError(e.message))}
+                  />
+                ))}
+              </div>
+            </section>
           ))}
-        </section>
+        </div>
       )}
 
       <footer style={{ marginTop: 28, textAlign: 'start', color: 'var(--text-dim)', fontSize: 11.5 }}>
