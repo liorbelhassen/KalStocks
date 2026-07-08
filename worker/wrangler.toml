@@ -1,0 +1,6 @@
+name = "kalstocks-vision"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# Deploy:  cd worker && wrangler deploy
+# Secret:  wrangler secret put GEMINI_API_KEY   (paste your Gemini key when prompted)

@@ -1,7 +1,30 @@
+import { useState } from 'react'
 import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts'
 
 const fmt = (n) =>
   n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+// Keyed by the persisted value in the parent, so it re-initializes when the stored quantity
+// changes (e.g. after a screenshot import) — no state-sync effect needed.
+function QuantityEditor({ value, price, hasData, onQuantity }) {
+  const [v, setV] = useState(value ?? '')
+  const commit = () => {
+    if (onQuantity && String(v) !== String(value ?? '')) onQuantity(v === '' ? 0 : v)
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-dim)', flexWrap: 'wrap' }}>
+      <span>כמות:</span>
+      <input
+        type="number" min="0" step="1" value={v} placeholder="—"
+        onChange={(e) => setV(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === 'Enter' && commit()}
+        style={{ width: 72, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '3px 6px', color: 'var(--text)', fontSize: 12, direction: 'ltr', textAlign: 'center' }}
+      />
+      {Number(v) > 0 && hasData && <span>· שווי: ₪{fmt(Number(v) * price)}</span>}
+    </div>
+  )
+}
 
 const tFmt = (t) => new Date(t).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
 
@@ -23,7 +46,7 @@ function Badge({ badge }) {
   return null
 }
 
-export default function StockTile({ stock, onRemove }) {
+export default function StockTile({ stock, onRemove, onQuantity }) {
   const hasData = stock.priceIls != null
   const up = (stock.changePct ?? 0) >= 0
   const color = up ? 'var(--up)' : 'var(--down)'
@@ -166,6 +189,8 @@ export default function StockTile({ stock, onRemove }) {
           ממתין לנתונים…
         </div>
       )}
+
+      <QuantityEditor key={stock.quantity ?? 'none'} value={stock.quantity} price={stock.priceIls} hasData={hasData} onQuantity={onQuantity} />
 
       {stock.thresholdPct != null && (
         <div style={{ fontSize: 11, color: 'var(--text-dim)', direction: 'rtl' }}>

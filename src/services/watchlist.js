@@ -40,10 +40,11 @@ export async function addToWatchlist({
   kind = 'equity',
   thresholdPct,
   notifyTelegram = false,
+  quantity,
 }) {
   const sym = symbol.trim()
   if (!sym) return
-  await setDoc(doc(col, widOf(sym)), {
+  const data = {
     userId: USER_ID,
     symbol: sym,
     nameHe: nameHe?.trim() || sym,
@@ -51,13 +52,21 @@ export async function addToWatchlist({
     kind,
     thresholdPct: thresholdPct ?? defaultThresholdFor(kind),
     notifyTelegram,
-  })
+  }
+  if (quantity != null && Number.isFinite(Number(quantity))) data.quantity = Number(quantity)
+  // merge so re-importing the same symbol updates it (no duplicate — doc id is per user+symbol).
+  await setDoc(doc(col, widOf(sym)), data, { merge: true })
 }
 
 export async function updateThreshold(symbol, thresholdPct) {
   const n = Number(thresholdPct)
   if (!Number.isFinite(n) || n <= 0) return
   await updateDoc(doc(col, widOf(symbol)), { thresholdPct: n })
+}
+
+export async function updateQuantity(symbol, quantity) {
+  const n = Number(quantity)
+  await updateDoc(doc(col, widOf(symbol)), { quantity: Number.isFinite(n) && n >= 0 ? n : 0 })
 }
 
 export async function removeFromWatchlist(symbol) {

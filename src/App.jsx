@@ -3,7 +3,8 @@ import StockTile from './components/StockTile'
 import Settings from './components/Settings'
 import { searchCatalog, kindLabel } from './catalog'
 import { logoUrl, isFlag } from '../lib/logos'
-import { subscribeWatchlist, addToWatchlist, removeFromWatchlist, updateThreshold } from './services/watchlist'
+import { subscribeWatchlist, addToWatchlist, removeFromWatchlist, updateThreshold, updateQuantity } from './services/watchlist'
+import { analyzeScreenshot } from './services/vision'
 import { subscribeSnapshots } from './services/snapshots'
 import { subscribeExplanations } from './services/explanations'
 import { subscribeBriefs } from './services/briefs'
@@ -17,7 +18,10 @@ export default function App() {
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importMsg, setImportMsg] = useState(null)
   const boxRef = useRef(null)
+  const fileRef = useRef(null)
 
   useEffect(() => {
     const unsubW = subscribeWatchlist(setWatchlist, (e) => setError(e.message))
@@ -57,6 +61,35 @@ export default function App() {
     }
   }
 
+  const onUpload = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setImporting(true)
+    setImportMsg('מנתח את צילום המסך…')
+    try {
+      const holdings = await analyzeScreenshot(file)
+      let added = 0
+      const unmatched = []
+      for (const h of holdings) {
+        const match = searchCatalog(h.name)[0]
+        if (match) {
+          await addToWatchlist({ ...match, quantity: h.quantity ?? undefined })
+          added++
+        } else {
+          unmatched.push(h.name)
+        }
+      }
+      setImportMsg(
+        `זוהו ${holdings.length} · נוספו/עודכנו ${added}` + (unmatched.length ? ` · לא זוהו בקטלוג: ${unmatched.join(', ')}` : ''),
+      )
+    } catch (err) {
+      setImportMsg('שגיאה בזיהוי: ' + err.message)
+    } finally {
+      setImporting(false)
+    }
+  }
+
   const stocks = watchlist.map((w) => {
     const priceSym = w.priceSymbol || w.symbol
     const snap = snapshots[priceSym]
@@ -86,6 +119,7 @@ export default function App() {
         : { logo: logoUrl(w.symbol) },
       note: w.kind === 'etf' ? 'מתומחר לפי מדד ת"א 35' : null,
       thresholdPct: w.thresholdPct,
+      quantity: w.quantity,
       isIndex: snap?.isIndex,
       priceIls: snap?.priceIls,
       changePct: snap?.changePct,
@@ -201,14 +235,34 @@ export default function App() {
         )}
       </div>
 
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 22, flexWrap: 'wrap' }}>
+        <input ref={fileRef} type="file" accept="image/*" onChange={onUpload} style={{ display: 'none' }} />
+        <button
+          onClick={() => fileRef.current?.click()}
+          disabled={importing}
+          style={{
+            background: 'var(--panel-2)', border: '1px solid var(--border)', borderRadius: 10,
+            padding: '9px 14px', color: 'var(--text)', fontSize: 13.5, opacity: importing ? 0.6 : 1,
+          }}
+        >
+          📷 העלה צילום מסך של התיק
+        </button>
+        {importMsg && <span style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>{importMsg}</span>}
+      </div>
+
       {stocks.length === 0 ? (
         <div style={{ color: 'var(--text-dim)', fontSize: 14, textAlign: 'center', padding: '40px 0' }}>
-          עדיין אין מניות במעקב. חפש למעלה כדי להוסיף.
+          עדיין אין מניות במעקב. חפש למעלה או העלה צילום מסך כדי להתחיל.
         </div>
       ) : (
         <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
           {stocks.map((s) => (
-            <StockTile key={s.key} stock={s} onRemove={() => removeFromWatchlist(s.symbol)} />
+            <StockTile
+              key={s.key}
+              stock={s}
+              onRemove={() => removeFromWatchlist(s.symbol)}
+              onQuantity={(q) => updateQuantity(s.symbol, q).catch((e) => setError(e.message))}
+            />
           ))}
         </section>
       )}
