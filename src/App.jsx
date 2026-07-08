@@ -84,7 +84,7 @@ export default function App() {
         `זוהו ${holdings.length} · נוספו/עודכנו ${added}` + (unmatched.length ? ` · לא זוהו בקטלוג: ${unmatched.join(', ')}` : ''),
       )
     } catch (err) {
-      setImportMsg('שגיאה בזיהוי: ' + err.message)
+      setImportMsg('⚠️ ' + err.message)
     } finally {
       setImporting(false)
     }

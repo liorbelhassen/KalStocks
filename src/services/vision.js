@@ -20,6 +20,14 @@ export async function analyzeScreenshot(file) {
     body: JSON.stringify({ imageBase64, mimeType: file.type || 'image/png' }),
   })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.detail || data.error || `שגיאת שרת (${res.status})`)
+  if (!res.ok) {
+    const raw = `${data.detail || ''} ${data.error || ''}`
+    if (data.status === 429 || /quota|exceeded|rate limit|too many/i.test(raw)) {
+      const retry = (raw.match(/retry in ([\d.]+)s/i) || [])[1]
+      const secs = retry ? Math.ceil(Number(retry)) : 60
+      throw new Error(`מכסת ה-AI החינמית מלאה כרגע (מגבלה של בקשות לדקה). נסו שוב בעוד כ-${secs} שניות.`)
+    }
+    throw new Error(data.detail || data.error || `שגיאת שרת (${res.status})`)
+  }
   return data.holdings || []
 }
