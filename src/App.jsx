@@ -200,7 +200,7 @@ export default function App() {
   // Group rows by sector (banks, indices, ETFs…) in a fixed display order.
   const f = filter.trim().toLowerCase()
   const shownStocks = f
-    ? marketStocks.filter((s) => `${s.nameHe} ${s.symbol} ${s.subtitle || ''}`.toLowerCase().includes(f))
+    ? marketStocks.filter((s) => `${s.nameHe} ${s.symbol} ${s.subtitle || ''} ${s.sector || ''}`.toLowerCase().includes(f))
     : marketStocks
 
   const grouped = {}
@@ -214,8 +214,8 @@ export default function App() {
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 20px 60px' }}>
-      <header style={{ marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+      <header style={{ marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
               <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800 }}>KalStocks</h1>
@@ -225,7 +225,7 @@ export default function App() {
               נתונים לצורכי מידע בלבד — אינם מהווים ייעוץ השקעות · המחירים מתעדכנים באיחור של כ־15 דקות.
             </p>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             {totalValue > 0 && (
               <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 14px' }}>
                 <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>שווי תיק ({market === 'US' ? '🇺🇸' : '🇮🇱'})</div>
@@ -379,7 +379,7 @@ export default function App() {
           <input
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder='🔎 סנן ברשימה לפי שם או סמל…'
+            placeholder='🔎 סנן לפי שם, סמל או סקטור (טכנולוגיה, בנקים…)'
             style={{ width: '100%', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 9, padding: '7px 12px', color: 'var(--text)', fontSize: 13.5 }}
           />
           {filter && (
