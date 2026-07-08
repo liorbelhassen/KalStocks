@@ -30,7 +30,7 @@ async function main() {
 
   const all = items.map((w) => {
     const s = snaps[w.priceSymbol || w.symbol] || {}
-    return { nameHe: w.nameHe, priceIls: s.priceIls, changePct: s.changePct, isIndex: s.isIndex }
+    return { symbol: w.symbol, nameHe: w.nameHe, priceIls: s.priceIls, changePct: s.changePct, isIndex: s.isIndex }
   })
 
   // Today's significant movers, joined with their explanations.
@@ -40,6 +40,7 @@ async function main() {
     const ev = d.data()
     const exp = (await db.collection('explanations').doc(d.id).get()).data()
     movers.push({
+      symbol: ev.symbol,
       nameHe: ev.nameHe,
       changePct: ev.changePct,
       direction: ev.direction,

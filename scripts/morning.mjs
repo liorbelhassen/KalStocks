@@ -55,6 +55,7 @@ async function main() {
     const ps = w.priceSymbol || w.symbol
     const a = assessments[ps] || {}
     return {
+      symbol: w.symbol,
       nameHe: w.nameHe,
       isIndex: snaps[ps]?.isIndex,
       priceIls: snaps[ps]?.priceIls,

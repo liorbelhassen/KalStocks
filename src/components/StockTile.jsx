@@ -24,7 +24,19 @@ export default function StockTile({ stock, onRemove }) {
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <div style={{ fontSize: 17, fontWeight: 700 }}>{stock.nameHe}</div>
+          <div style={{ fontSize: 17, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+            {stock.logo && (
+              <img
+                src={stock.logo}
+                alt=""
+                width={22}
+                height={22}
+                style={{ borderRadius: 5, background: '#fff', flexShrink: 0 }}
+                onError={(e) => { e.currentTarget.style.display = 'none' }}
+              />
+            )}
+            <span>{stock.nameHe}</span>
+          </div>
           {stock.note ? (
             <div style={{ fontSize: 11.5, color: 'var(--text-dim)' }}>{stock.note}</div>
           ) : (

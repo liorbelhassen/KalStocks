@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import StockTile from './components/StockTile'
 import Settings from './components/Settings'
 import { searchCatalog, kindLabel } from './catalog'
+import { logoUrl } from '../lib/logos'
 import { subscribeWatchlist, addToWatchlist, removeFromWatchlist, updateThreshold } from './services/watchlist'
 import { subscribeSnapshots } from './services/snapshots'
 import { subscribeExplanations } from './services/explanations'
@@ -60,6 +61,7 @@ export default function App() {
       key: w.symbol,
       symbol: w.symbol,
       nameHe: w.nameHe,
+      logo: logoUrl(w.symbol),
       note: w.kind === 'etf' ? 'מתומחר לפי מדד ת"א 35' : null,
       thresholdPct: w.thresholdPct,
       isIndex: snap?.isIndex,
