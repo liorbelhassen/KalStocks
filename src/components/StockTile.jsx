@@ -26,6 +26,26 @@ function QuantityEditor({ value, price, hasData, onQuantity }) {
   )
 }
 
+// Manual ETF unit price (₪) — ETFs aren't on the free data source, so the user enters the price.
+function PriceEditor({ value, onPrice }) {
+  const [v, setV] = useState(value ?? '')
+  const commit = () => {
+    if (onPrice && String(v) !== String(value ?? '')) onPrice(v === '' ? 0 : v)
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-dim)', flexWrap: 'wrap' }}>
+      <span>מחיר קרן (₪):</span>
+      <input
+        type="number" min="0" step="0.01" value={v} placeholder="הזן"
+        onChange={(e) => setV(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === 'Enter' && commit()}
+        style={{ width: 82, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '3px 6px', color: 'var(--text)', fontSize: 12, direction: 'ltr', textAlign: 'center' }}
+      />
+    </div>
+  )
+}
+
 const tFmt = (t) => new Date(t).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
 
 function Badge({ badge }) {
@@ -46,8 +66,9 @@ function Badge({ badge }) {
   return null
 }
 
-export default function StockTile({ stock, onRemove, onQuantity }) {
-  const hasData = stock.priceIls != null
+export default function StockTile({ stock, onRemove, onQuantity, onPrice }) {
+  const hasPrice = stock.priceIls != null
+  const hasChange = stock.changePct != null
   const up = (stock.changePct ?? 0) >= 0
   const color = up ? 'var(--up)' : 'var(--down)'
   const bg = up ? 'var(--up-bg)' : 'var(--down-bg)'
@@ -85,9 +106,9 @@ export default function StockTile({ stock, onRemove, onQuantity }) {
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
           <div style={{ textAlign: 'left' }}>
             <div style={{ fontSize: 18, fontWeight: 700, direction: 'ltr' }}>
-              {hasData ? (stock.isIndex ? fmt(stock.priceIls) : `₪${fmt(stock.priceIls)}`) : '—'}
+              {hasPrice ? (stock.isIndex ? fmt(stock.priceIls) : `₪${fmt(stock.priceIls)}`) : '—'}
             </div>
-            {hasData && (
+            {hasChange && (
               <div
                 style={{
                   display: 'inline-block',
@@ -124,7 +145,7 @@ export default function StockTile({ stock, onRemove, onQuantity }) {
         </div>
       </div>
 
-      {hasData ? (
+      {series.length ? (
         <div>
           <div style={{ height: 46 }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -201,7 +222,9 @@ export default function StockTile({ stock, onRemove, onQuantity }) {
         </div>
       )}
 
-      <QuantityEditor key={stock.quantity ?? 'none'} value={stock.quantity} price={stock.priceIls} hasData={hasData} onQuantity={onQuantity} />
+      {stock.etf && <PriceEditor key={stock.manualPrice ?? 'none'} value={stock.manualPrice} onPrice={onPrice} />}
+
+      <QuantityEditor key={stock.quantity ?? 'none'} value={stock.quantity} price={stock.priceIls} hasData={hasPrice} onQuantity={onQuantity} />
 
       {stock.thresholdPct != null && (
         <div style={{ fontSize: 11, color: 'var(--text-dim)', direction: 'rtl' }}>

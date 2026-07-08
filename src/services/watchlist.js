@@ -69,6 +69,13 @@ export async function updateQuantity(symbol, quantity) {
   await updateDoc(doc(col, widOf(symbol)), { quantity: Number.isFinite(n) && n >= 0 ? n : 0 })
 }
 
+// Manual unit price (₪) — used for ETFs, whose real price isn't on the free data source
+// (we only have the tracked index level). Lets the holding value be computed correctly.
+export async function updatePrice(symbol, price) {
+  const n = Number(price)
+  await updateDoc(doc(col, widOf(symbol)), { manualPrice: Number.isFinite(n) && n > 0 ? n : null })
+}
+
 export async function removeFromWatchlist(symbol) {
   await deleteDoc(doc(col, widOf(symbol)))
 }

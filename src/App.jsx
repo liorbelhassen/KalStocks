@@ -3,7 +3,7 @@ import StockTile from './components/StockTile'
 import Settings from './components/Settings'
 import { searchCatalog, matchInstrument, kindLabel } from './catalog'
 import { logoUrl, isFlag } from '../lib/logos'
-import { subscribeWatchlist, addToWatchlist, removeFromWatchlist, updateThreshold, updateQuantity } from './services/watchlist'
+import { subscribeWatchlist, addToWatchlist, removeFromWatchlist, updateThreshold, updateQuantity, updatePrice } from './services/watchlist'
 import { analyzeScreenshot, quoteSymbol } from './services/vision'
 
 const fmtIls = (n) => (n ?? 0).toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -103,6 +103,10 @@ export default function App() {
   const stocks = watchlist.map((w) => {
     const priceSym = w.priceSymbol || w.symbol
     const snap = snapshots[priceSym] || liveQuotes[priceSym]
+    const isEtf = w.kind === 'etf'
+    // ETFs aren't priced on the free source (we only have the index level), so use the user's
+    // manual price for them; equities/index use the live Yahoo price.
+    const effectivePrice = w.manualPrice != null ? w.manualPrice : isEtf ? null : snap?.priceIls
     const exp = explanations[w.symbol]
     const brief = briefs[priceSym]
     const hhmm = (ms) => (ms ? new Date(ms).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '')
@@ -127,11 +131,13 @@ export default function App() {
       badge: isFlag(w.symbol, { kind: w.kind, isIndex: snap?.isIndex })
         ? { flag: true }
         : { logo: logoUrl(w.symbol) },
-      note: w.kind === 'etf' ? 'מתומחר לפי מדד ת"א 35' : null,
+      note: isEtf ? 'עוקב אחרי מדד ת"א 35 · הזן מחיר קרן לחישוב שווי' : null,
       thresholdPct: w.thresholdPct,
       quantity: w.quantity,
-      isIndex: snap?.isIndex,
-      priceIls: snap?.priceIls,
+      etf: isEtf,
+      manualPrice: w.manualPrice,
+      isIndex: isEtf ? false : snap?.isIndex,
+      priceIls: effectivePrice,
       changePct: snap?.changePct,
       series: snap?.series || [],
       explanation: insight,
@@ -285,6 +291,7 @@ export default function App() {
               stock={s}
               onRemove={() => removeFromWatchlist(s.symbol)}
               onQuantity={(q) => updateQuantity(s.symbol, q).catch((e) => setError(e.message))}
+              onPrice={(p) => updatePrice(s.symbol, p).catch((e) => setError(e.message))}
             />
           ))}
         </section>
