@@ -123,6 +123,12 @@ export default function StockTile({ stock, onRemove }) {
           אין תנודה חריגה שדורשת הסבר כרגע.
         </div>
       )}
+
+      {stock.thresholdPct != null && (
+        <div style={{ fontSize: 11, color: 'var(--text-dim)', direction: 'rtl' }}>
+          סף התראה: {stock.thresholdPct}%
+        </div>
+      )}
     </div>
   )
 }

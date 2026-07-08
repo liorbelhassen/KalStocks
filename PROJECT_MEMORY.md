@@ -86,8 +86,9 @@ Single-user MVP now, but designed so multi-tenant SaaS is an extension, not a re
   `src/catalog.js` (name/alias substring, not security number; "35" → index + all TA-35 ETFs);
   add/remove; favicon. Firestore rules deployed; watchlist RW verified, snapshots client-write denied.
   **ETF proxy:** watchlist docs carry `priceSymbol` (+ `kind`); ETFs set `priceSymbol=TA35.TA` and the
-  poller polls unique `priceSymbol`s. Pending: per-symbol threshold editing UI (defaults to 3%).
-  Git repo initialized (branch `main`, first commit); not yet pushed to GitHub.
+  poller polls unique `priceSymbol`s. **Settings modal (⚙️)** edits per-symbol alert thresholds
+  (presets 0.5/1/2/3/5% + custom); smart defaults by kind (index/etf 1%, equity 3%,
+  `defaultThresholdFor`). Threshold shown on each tile. Pushed to github.com/liorbelhassen/KalStocks.
 - [x] **3 — Volatility detection:** `lib/volatility.js` `classify()` (daily-move OR intraday-swing);
   poller upserts one `events` doc per (instrument, day), sets `needsExplanation` on new/worsening
   (higher band) moves so Phase 4 explains fresh moves, not every tick. Unit-tested.

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import StockTile from './components/StockTile'
+import Settings from './components/Settings'
 import { searchCatalog, kindLabel } from './catalog'
-import { subscribeWatchlist, addToWatchlist, removeFromWatchlist } from './services/watchlist'
+import { subscribeWatchlist, addToWatchlist, removeFromWatchlist, updateThreshold } from './services/watchlist'
 import { subscribeSnapshots } from './services/snapshots'
 import { subscribeExplanations } from './services/explanations'
 
@@ -12,6 +13,7 @@ export default function App() {
   const [error, setError] = useState(null)
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const boxRef = useRef(null)
 
   useEffect(() => {
@@ -59,6 +61,7 @@ export default function App() {
       symbol: w.symbol,
       nameHe: w.nameHe,
       note: w.kind === 'etf' ? 'מתומחר לפי מדד ת"א 35' : null,
+      thresholdPct: w.thresholdPct,
       isIndex: snap?.isIndex,
       priceIls: snap?.priceIls,
       changePct: snap?.changePct,
@@ -77,14 +80,34 @@ export default function App() {
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 20px 60px' }}>
       <header style={{ marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800 }}>KalStocks</h1>
-          <span style={{ color: 'var(--text-dim)', fontSize: 14 }}>הסבר עממי לתנודות בורסת תל אביב</span>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+            <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800 }}>KalStocks</h1>
+            <span style={{ color: 'var(--text-dim)', fontSize: 14 }}>הסבר עממי לתנודות בורסת תל אביב</span>
+          </div>
+          <button
+            onClick={() => setSettingsOpen(true)}
+            title="הגדרות ספי התראה"
+            style={{
+              background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 10,
+              padding: '8px 14px', color: 'var(--text)', fontSize: 14, whiteSpace: 'nowrap',
+            }}
+          >
+            ⚙️ הגדרות
+          </button>
         </div>
         <p style={{ color: 'var(--text-dim)', fontSize: 12, marginTop: 6 }}>
           נתונים לצורכי מידע בלבד — אינם מהווים ייעוץ השקעות · המחירים מתעדכנים באיחור של כ־15 דקות.
         </p>
       </header>
+
+      {settingsOpen && (
+        <Settings
+          watchlist={watchlist}
+          onClose={() => setSettingsOpen(false)}
+          onUpdate={(symbol, thr) => updateThreshold(symbol, thr).catch((e) => setError(e.message))}
+        />
+      )}
 
       {error && (
         <div

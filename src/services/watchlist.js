@@ -3,11 +3,19 @@ import {
   collection,
   doc,
   setDoc,
+  updateDoc,
   deleteDoc,
   onSnapshot,
   query,
   where,
 } from 'firebase/firestore'
+
+// Sensible default trigger threshold by instrument type — indices move far less than
+// individual stocks, so a 1% index move is roughly as notable as a 3% stock move.
+export function defaultThresholdFor(kind) {
+  if (kind === 'index' || kind === 'etf') return 1
+  return 3
+}
 
 // Single-user MVP: a constant owner id stamped on every doc so multi-tenant is a
 // later swap to the auth uid (see PROJECT_MEMORY §5). Doc id = `${USER_ID}__${symbol}`.
@@ -30,7 +38,7 @@ export async function addToWatchlist({
   nameHe,
   priceSymbol,
   kind = 'equity',
-  thresholdPct = 3,
+  thresholdPct,
   notifyTelegram = false,
 }) {
   const sym = symbol.trim()
@@ -41,9 +49,15 @@ export async function addToWatchlist({
     nameHe: nameHe?.trim() || sym,
     priceSymbol: (priceSymbol || sym).trim(),
     kind,
-    thresholdPct,
+    thresholdPct: thresholdPct ?? defaultThresholdFor(kind),
     notifyTelegram,
   })
+}
+
+export async function updateThreshold(symbol, thresholdPct) {
+  const n = Number(thresholdPct)
+  if (!Number.isFinite(n) || n <= 0) return
+  await updateDoc(doc(col, widOf(symbol)), { thresholdPct: n })
 }
 
 export async function removeFromWatchlist(symbol) {
