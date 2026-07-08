@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts'
+import { AreaChart, Area, ResponsiveContainer, YAxis } from 'recharts'
 
 const fmt = (n) =>
   n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -54,17 +54,18 @@ export default function StockTile({ stock, onRemove, onQuantity }) {
   const series = stock.series || []
   const sparkData = series.map((p, i) => ({ i, v: p.v }))
   const timeRange = series.length > 1 ? `היום · ${tFmt(series[0].t)}–${tFmt(series[series.length - 1].t)}` : null
+  const gid = 'grad-' + (stock.symbol || '').replace(/[^a-zA-Z0-9]/g, '')
 
   return (
     <div
       style={{
         background: 'var(--panel)',
         border: '1px solid var(--border)',
-        borderRadius: 14,
-        padding: 16,
+        borderRadius: 12,
+        padding: 13,
         display: 'flex',
         flexDirection: 'column',
-        gap: 12,
+        gap: 9,
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -125,12 +126,18 @@ export default function StockTile({ stock, onRemove, onQuantity }) {
 
       {hasData ? (
         <div>
-          <div style={{ height: 44 }}>
+          <div style={{ height: 46 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={sparkData}>
+              <AreaChart data={sparkData} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
+                <defs>
+                  <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={color} stopOpacity={0.35} />
+                    <stop offset="100%" stopColor={color} stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
                 <YAxis domain={['dataMin', 'dataMax']} hide />
-                <Line type="monotone" dataKey="v" stroke={color} strokeWidth={2} dot={false} isAnimationActive={false} />
-              </LineChart>
+                <Area type="monotone" dataKey="v" stroke={color} strokeWidth={2} fill={`url(#${gid})`} dot={false} isAnimationActive={false} />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
           {timeRange && (
@@ -166,7 +173,9 @@ export default function StockTile({ stock, onRemove, onQuantity }) {
                   : '☀️ סקירת בוקר'
                 : '📈 מצב נוכחי'}
           </div>
-          <div>{stock.explanation.text}</div>
+          <div style={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+            {stock.explanation.text}
+          </div>
           {stock.explanation.confidence && (
             <div
               style={{

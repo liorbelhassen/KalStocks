@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import StockTile from './components/StockTile'
 import Settings from './components/Settings'
-import { searchCatalog, kindLabel } from './catalog'
+import { searchCatalog, matchInstrument, kindLabel } from './catalog'
 import { logoUrl, isFlag } from '../lib/logos'
 import { subscribeWatchlist, addToWatchlist, removeFromWatchlist, updateThreshold, updateQuantity } from './services/watchlist'
 import { analyzeScreenshot } from './services/vision'
@@ -72,7 +72,7 @@ export default function App() {
       let added = 0
       const unmatched = []
       for (const h of holdings) {
-        const match = searchCatalog(h.name)[0]
+        const match = matchInstrument(h.name)
         if (match) {
           await addToWatchlist({ ...match, quantity: h.quantity ?? undefined })
           added++
@@ -255,7 +255,7 @@ export default function App() {
           עדיין אין מניות במעקב. חפש למעלה או העלה צילום מסך כדי להתחיל.
         </div>
       ) : (
-        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
+        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
           {stocks.map((s) => (
             <StockTile
               key={s.key}

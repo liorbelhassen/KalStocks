@@ -43,9 +43,11 @@ export const CATALOG = [
 const KIND_LABEL = { index: 'מדד', equity: 'מניה', etf: 'קרן סל' }
 export const kindLabel = (k) => KIND_LABEL[k] || ''
 
-// Normalize for matching: lowercase, strip quotes/dashes/spaces so "ת\"א 35", "תא 35",
-// "תא35" and "35" all match consistently.
-const norm = (s) => (s || '').toLowerCase().replace(/["'`״׳\-\s]/g, '')
+// Normalize for matching: lowercase, strip quotes/dashes/dots/parens/spaces so "ת\"א 35",
+// "תא 35", "קסם.תא 35", "תא35" and "35" all match consistently.
+const norm = (s) => (s || '').toLowerCase().replace(/["'`״׳().[\]/\\\-\s]/g, '')
+const tokenize = (s) =>
+  (s || '').toLowerCase().replace(/["'`״׳().[\]/\\]/g, ' ').split(/\s+/).filter((t) => t.length >= 2)
 
 export function searchCatalog(queryStr, { excludeSymbols = [] } = {}) {
   const q = norm(queryStr)
@@ -56,4 +58,32 @@ export function searchCatalog(queryStr, { excludeSymbols = [] } = {}) {
     const hay = norm([item.nameHe, item.symbol, ...(item.aliases || [])].join(' '))
     return hay.includes(q)
   }).slice(0, 12)
+}
+
+// Fuzzy match a (messy) broker name to a catalog instrument — for screenshot import.
+// Tries substring first, then token overlap (handles "קסם.תא 35", "מו.סל תא 35", "דיסקונט א", …).
+export function matchInstrument(name) {
+  const q = norm(name)
+  if (!q) return null
+  for (const it of CATALOG) {
+    const hay = norm([it.nameHe, it.symbol, ...(it.aliases || [])].join(' '))
+    if (hay.includes(q) || q.includes(norm(it.nameHe))) return it
+  }
+  const qt = new Set(tokenize(name))
+  if (!qt.size) return null
+  let best = null
+  let bestScore = 0
+  for (const it of CATALOG) {
+    const ht = new Set(tokenize([it.nameHe, ...(it.aliases || [])].join(' ')))
+    let score = 0
+    for (const t of qt) if (ht.has(t)) score++
+    if (score > bestScore) {
+      bestScore = score
+      best = it
+    }
+  }
+  // ≥2 shared tokens, or a single strong token when the name is short.
+  if (bestScore >= 2) return best
+  if (bestScore >= 1 && qt.size <= 2) return best
+  return null
 }
