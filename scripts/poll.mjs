@@ -1,4 +1,4 @@
-// KalStocks poller — runs on a schedule (GitHub Actions cron) instead of a Firebase
+// StocksInsights poller — runs on a schedule (GitHub Actions cron) instead of a Firebase
 // Cloud Function, so the project stays on the free Spark plan (no Blaze).
 // Fetches watched symbols from Yahoo and writes normalized snapshots to Firestore
 // via the Admin SDK (bypasses security rules).

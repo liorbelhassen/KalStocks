@@ -1,4 +1,4 @@
-// KalStocks Worker. Two actions:
+// StocksInsights Worker. Two actions:
 //  - vision: a portfolio screenshot → Gemini Vision → detected holdings (Gemini key server-side).
 //  - quote:  fetch a live Yahoo snapshot for a symbol (so a manually-added stock loads instantly,
 //            without waiting for the scheduled poller — no Gemini involved).
@@ -119,7 +119,7 @@ async function morningJob(env) {
     await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: env.DIGEST_FROM || 'KalStocks <onboarding@resend.dev>', to: env.DIGEST_TO, subject: `☀️ סקירת בוקר KalStocks · ${dateStr}`, html }),
+      body: JSON.stringify({ from: env.DIGEST_FROM || 'StocksInsights <onboarding@resend.dev>', to: env.DIGEST_TO, subject: `☀️ סקירת בוקר StocksInsights · ${dateStr}`, html }),
     })
   }
 
@@ -186,7 +186,7 @@ export default {
         try {
           const r = await fetch(
             `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(name)}&quotesCount=6&newsCount=0`,
-            { headers: { 'User-Agent': 'Mozilla/5.0 (KalStocks)' } },
+            { headers: { 'User-Agent': 'Mozilla/5.0 (StocksInsights)' } },
           )
           const d = await r.json()
           const hit = (d.quotes || []).find((x) => x.symbol && ['EQUITY', 'ETF', 'INDEX'].includes(x.quoteType))
@@ -218,7 +218,7 @@ export default {
         try {
           const r = await fetch(
             `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=10&newsCount=0`,
-            { headers: { 'User-Agent': 'Mozilla/5.0 (KalStocks)' } },
+            { headers: { 'User-Agent': 'Mozilla/5.0 (StocksInsights)' } },
           )
           const d = await r.json()
           const results = (d.quotes || [])

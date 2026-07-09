@@ -277,8 +277,8 @@ export default function App() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-              <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800 }}>KalStocks</h1>
-              <span style={{ color: 'var(--text-dim)', fontSize: 14 }}>קבל תובנות על עליות וירידות בבורסה</span>
+              <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800 }}>StocksInsights</h1>
+              <span style={{ color: 'var(--text-dim)', fontSize: 14 }}>תובנות על מניות בשפה פשוטה</span>
             </div>
             <p style={{ color: 'var(--text-dim)', fontSize: 12, margin: '5px 0 0' }}>
               נתונים לצורכי מידע בלבד — אינם מהווים ייעוץ השקעות · המחירים מתעדכנים באיחור של כ־15 דקות.

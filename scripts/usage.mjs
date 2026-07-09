@@ -34,11 +34,11 @@ async function main() {
     console.log(`RESEND_API_KEY/DIGEST_TO not set — built usage HTML (${html.length} chars) but not sending.`)
     return
   }
-  const from = process.env.DIGEST_FROM || 'KalStocks <onboarding@resend.dev>'
+  const from = process.env.DIGEST_FROM || 'StocksInsights <onboarding@resend.dev>'
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from, to, subject: `📊 מוניטור מכסות KalStocks · ${yStr}`, html }),
+    body: JSON.stringify({ from, to, subject: `📊 מוניטור מכסות StocksInsights · ${yStr}`, html }),
   })
   const body = await res.text()
   if (!res.ok) throw new Error(`Resend ${res.status}: ${body.slice(0, 300)}`)

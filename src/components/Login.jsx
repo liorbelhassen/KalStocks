@@ -38,9 +38,9 @@ export default function Login() {
         }}
       >
         <div style={{ fontSize: 40, marginBottom: 6 }}>📈</div>
-        <h1 style={{ margin: '0 0 6px', fontSize: 30, fontWeight: 800 }}>KalStocks</h1>
+        <h1 style={{ margin: '0 0 6px', fontSize: 30, fontWeight: 800 }}>StocksInsights</h1>
         <p style={{ color: 'var(--text-dim)', fontSize: 14, margin: '0 0 28px', lineHeight: 1.6 }}>
-          הסבר עממי לתנודות בבורסה — התיק שלך, ההערכות שלך, במקום אחד.
+          תובנות על מניות בשפה פשוטה — התיק שלך, ההערכות שלך, במקום אחד.
           <br />
           התחבר כדי לראות ולשמור את התיק שלך.
         </p>
