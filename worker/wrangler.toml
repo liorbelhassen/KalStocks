@@ -7,7 +7,7 @@ compatibility_flags = ["nodejs_compat"]
 #  - every 5 min: price poll
 #  - 06:00 & 07:00 UTC: morning brief (the job runs only at the 09:00 Israel slot — handles DST)
 [triggers]
-crons = ["*/5 * * * *", "0 6 * * 0-4", "0 7 * * 0-4"]
+crons = ["*/5 * * * *", "0 6 * * SUN-THU", "0 7 * * SUN-THU"]
 
 # Deploy:  cd worker && wrangler deploy
 # Secrets: wrangler secret put GEMINI_API_KEY
