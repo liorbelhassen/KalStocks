@@ -6,6 +6,7 @@ import { fetchSnapshot, fetchSnapshots } from '../lib/yahoo.js'
 import { getAccessToken, listDocs, patchDoc } from './firestore.js'
 import { assessOpen, buildMorningHtml } from '../lib/morning.js'
 import { explainMove } from '../lib/explain.js'
+import { visionExtract } from '../lib/vision.js'
 
 const ALLOWED = ['https://kalstocks1.web.app', 'http://localhost:5175', 'http://localhost:5173']
 
@@ -211,23 +212,15 @@ export default {
       const { imageBase64, mimeType } = body
       if (!imageBase64) return json({ error: 'missing image' }, 400, origin)
 
-      const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${env.GEMINI_API_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [
-              { parts: [{ text: PROMPT }, { inline_data: { mime_type: mimeType || 'image/png', data: imageBase64 } }] },
-            ],
-            generationConfig: { temperature: 0.1 },
-          }),
-        },
-      )
-      const data = await r.json()
-      if (!r.ok) return json({ error: 'gemini', status: r.status, detail: data?.error?.message || '' }, 502, origin)
+      // Gemini Vision first, OpenAI Vision fallback when Gemini's quota is out.
+      let text
+      try {
+        const keys = { geminiKey: env.GEMINI_API_KEY, geminiModel: env.GEMINI_MODEL, openaiKey: env.OPENAI_API_KEY, openaiModel: env.OPENAI_MODEL }
+        ;({ text } = await visionExtract({ imageBase64, mimeType: mimeType || 'image/png', prompt: PROMPT }, keys))
+      } catch (e) {
+        return json({ error: 'vision failed', detail: String(e) }, 502, origin)
+      }
 
-      const text = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text).filter(Boolean).join('\n')
       const holdings = text
         .split('\n')
         .map((line) => line.trim())
