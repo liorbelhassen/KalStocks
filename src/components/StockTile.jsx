@@ -24,8 +24,8 @@ function MiniField({ label, value, onCommit, width = 46 }) {
 
 function Badge({ badge }) {
   if (!badge) return null
-  if (badge.flag) return <span style={{ fontSize: 28, flexShrink: 0 }}>🇮🇱</span>
-  if (badge.logo) return <img src={badge.logo} alt="" width={34} height={34} style={{ borderRadius: 6, background: '#fff', objectFit: 'contain', flexShrink: 0 }} onError={(e) => { e.currentTarget.style.display = 'none' }} />
+  if (badge.flag) return <span style={{ fontSize: 56, flexShrink: 0, lineHeight: 1 }}>🇮🇱</span>
+  if (badge.logo) return <img src={badge.logo} alt="" width={68} height={68} style={{ borderRadius: 10, background: '#fff', objectFit: 'contain', flexShrink: 0 }} onError={(e) => { e.currentTarget.style.display = 'none' }} />
   return null
 }
 
@@ -41,7 +41,7 @@ function periodInsight(p, period) {
 
 const TABS = [['today', 'היום'], ['week', 'השבוע'], ['month', 'החודש']]
 
-export default function StockTile({ stock, onRemove, onQuantity, onPrice }) {
+export default function StockTile({ stock, onRemove, onQuantity, onPrice, insightFontSize = 13 }) {
   const [tab, setTab] = useState('today')
   const cur = stock.currency || '₪'
   const hasPrice = stock.priceIls != null
@@ -72,19 +72,19 @@ export default function StockTile({ stock, onRemove, onQuantity, onPrice }) {
   return (
     <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 10, padding: '11px 14px', display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
       {/* 1 · identity (FIXED — not affected by the period tab) */}
-      <div style={{ width: 172, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+      <div style={{ width: 300, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
         <Badge badge={stock.badge} />
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 19, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stock.nameHe}</div>
-          <div style={{ fontSize: 12.5, color: 'var(--text-dim)', direction: 'ltr', textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stock.subtitle}</div>
+          <div style={{ fontSize: 38, fontWeight: 700, lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stock.nameHe}</div>
+          <div style={{ fontSize: 13, color: 'var(--text-dim)', direction: 'ltr', textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stock.subtitle}</div>
         </div>
       </div>
 
       {/* 2 · price (current, fixed) + period change */}
-      <div style={{ width: 118, flexShrink: 0, textAlign: 'left', direction: 'ltr' }}>
+      <div style={{ width: 240, flexShrink: 0, textAlign: 'left', direction: 'ltr' }}>
         <div style={{ fontSize: 21, fontWeight: 800 }}>{hasPrice ? (stock.isIndex ? fmt(stock.priceIls) : `${cur}${fmt(stock.priceIls)}`) : '—'}</div>
         {hasChange && (
-          <span style={{ display: 'inline-block', marginTop: 4, padding: '2px 8px', borderRadius: 999, background: bg, color, fontSize: 14, fontWeight: 700 }}>
+          <span style={{ display: 'inline-block', marginTop: 4, padding: '4px 14px', borderRadius: 14, background: bg, color, fontSize: 56, fontWeight: 800, lineHeight: 1.1 }}>
             {up ? '▲' : '▼'} {Math.abs(view.pct).toFixed(2)}%
           </span>
         )}
@@ -129,7 +129,7 @@ export default function StockTile({ stock, onRemove, onQuantity, onPrice }) {
         {view.insight ? (
           <>
             {view.insight.label && <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-dim)' }}>{view.insight.label}</div>}
-            <div style={{ fontSize: 12.5, lineHeight: 1.5 }}>{view.insight.text}</div>
+            <div style={{ fontSize: insightFontSize, lineHeight: 1.5 }}>{view.insight.text}</div>
             {view.insight.confidence && (
               <div style={{ fontSize: 10.5, color: 'var(--text-dim)', marginTop: 1 }}>
                 ביטחון: {view.insight.confidence}

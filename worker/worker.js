@@ -80,12 +80,13 @@ async function morningJob(env) {
   const digestUid = users.find((u) => u.email && u.email === env.DIGEST_TO)?.uid || null
   const emailSource = digestUid ? items.filter((w) => w.userId === digestUid) : items
 
+  // 'other' (manual-price) stocks still get a news-based assessment by name — just no periods.
   const groups = new Map()
   for (const w of items) {
-    if (w.kind === 'other') continue
     const ps = w.priceSymbol || w.symbol
     if (!ps) continue
-    if (!groups.has(ps)) groups.set(ps, { priceSymbol: ps, repName: w.nameHe, isIndex: snaps[ps]?.isIndex })
+    const isOther = w.kind === 'other'
+    if (!groups.has(ps)) groups.set(ps, { priceSymbol: ps, repName: w.nameHe, isIndex: snaps[ps]?.isIndex, isOther, symbol: isOther ? '' : ps })
     if (snaps[ps]?.isIndex) groups.get(ps).repName = w.nameHe
   }
 
@@ -93,7 +94,7 @@ async function morningJob(env) {
   const assessments = {}
   for (const g of groups.values()) {
     try {
-      assessments[g.priceSymbol] = await assessOpen({ nameHe: g.repName, symbol: g.priceSymbol, date: dateStr, isIndex: !!g.isIndex, session: 'morning' }, keys)
+      assessments[g.priceSymbol] = await assessOpen({ nameHe: g.repName, symbol: g.symbol, date: dateStr, isIndex: !!g.isIndex, session: 'morning' }, keys)
     } catch {
       /* skip */
     }
@@ -126,9 +127,10 @@ async function morningJob(env) {
     const v = (snap.series || []).map((p) => p.v).filter((x) => x != null)
     return v.length > 1 ? ((v[v.length - 1] - v[0]) / v[0]) * 100 : 0
   }
-  for (const ps of groups.keys()) {
+  for (const [ps, g] of groups.entries()) {
+    if (g.isOther) continue // no Yahoo price series for manual-price stocks
     try {
-      const repName = groups.get(ps).repName || ps
+      const repName = g.repName || ps
       const wk = await fetchSnapshot(ps, { range: '5d', interval: '30m' })
       const mo = await fetchSnapshot(ps, { range: '1mo', interval: '1d' })
       const wc = pchg(wk)

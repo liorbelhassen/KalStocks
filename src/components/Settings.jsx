@@ -55,7 +55,7 @@ function ThresholdRow({ item, onCommit }) {
   )
 }
 
-export default function Settings({ watchlist, onClose, onUpdate }) {
+export default function Settings({ watchlist, onClose, onUpdate, insightFontSize = 14, onInsightFontSize }) {
   return (
     <div
       onClick={onClose}
@@ -72,9 +72,31 @@ export default function Settings({ watchlist, onClose, onUpdate }) {
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>הגדרות ספי התראה</h2>
+          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>הגדרות</h2>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--text-dim)', fontSize: 20 }}>✕</button>
         </div>
+
+        <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>גודל טקסט התובנות</div>
+              <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>גודל הגופן של הסקירות בכרטיסים</div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <input
+                type="range" min="11" max="26" step="1" value={insightFontSize}
+                onChange={(e) => onInsightFontSize?.(Number(e.target.value))}
+                style={{ width: 160 }}
+              />
+              <span style={{ fontSize: 13, fontWeight: 700, direction: 'ltr', minWidth: 40, textAlign: 'center' }}>{insightFontSize}px</span>
+            </div>
+          </div>
+          <div style={{ fontSize: insightFontSize, lineHeight: 1.5, marginTop: 10, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px' }}>
+            תצוגה מקדימה: המניה עלתה על רקע דוחות חזקים ואופטימיות בשוק.
+          </div>
+        </div>
+
+        <h3 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700 }}>ספי התראה</h3>
 
         <p style={{ color: 'var(--text-dim)', fontSize: 13, lineHeight: 1.6, marginTop: 0 }}>
           הסף קובע איזו תנועה נחשבת "משמעותית" ומפעילה הסבר. תנודה יומית שחוצה את הסף — או תנודתיות

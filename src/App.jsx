@@ -30,6 +30,8 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [market, setMarket] = useState('IL') // active tab: 'IL' | 'US'
   const [filter, setFilter] = useState('') // filter the watched list by name/symbol
+  const [insightSize, setInsightSize] = useState(() => Number(localStorage.getItem('kal_insightSize')) || 14)
+  const changeInsightSize = (n) => { setInsightSize(n); localStorage.setItem('kal_insightSize', String(n)) }
   const [importing, setImporting] = useState(false)
   const [importMsg, setImportMsg] = useState(null)
   const boxRef = useRef(null)
@@ -237,13 +239,16 @@ export default function App() {
   ]
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 20px 60px' }}>
+    <div style={{ maxWidth: '100%', margin: '0 auto', padding: '10px 28px 60px' }}>
+      <div style={{ textAlign: 'right', color: 'var(--text-dim)', fontSize: 12, marginBottom: 6 }}>
+        עודכן לאחרונה: {lastUpdatedLabel} · המחירים מתרעננים אוטומטית כל ~5 דקות בשעות המסחר.
+      </div>
       <header style={{ marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
               <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800 }}>KalStocks</h1>
-              <span style={{ color: 'var(--text-dim)', fontSize: 14 }}>הסבר עממי לתנודות בורסת תל אביב</span>
+              <span style={{ color: 'var(--text-dim)', fontSize: 14 }}>קבל תובנות על עליות וירידות בבורסה</span>
             </div>
             <p style={{ color: 'var(--text-dim)', fontSize: 12, margin: '5px 0 0' }}>
               נתונים לצורכי מידע בלבד — אינם מהווים ייעוץ השקעות · המחירים מתעדכנים באיחור של כ־15 דקות.
@@ -320,6 +325,8 @@ export default function App() {
           watchlist={watchlist}
           onClose={() => setSettingsOpen(false)}
           onUpdate={(symbol, thr) => updateThreshold(user.uid, symbol, thr).catch((e) => setError(e.message))}
+          insightFontSize={insightSize}
+          onInsightFontSize={changeInsightSize}
         />
       )}
 
@@ -460,6 +467,7 @@ export default function App() {
                   <StockTile
                     key={s.key}
                     stock={s}
+                    insightFontSize={insightSize}
                     onRemove={() => removeFromWatchlist(user.uid, s.symbol)}
                     onQuantity={(qty) => updateQuantity(user.uid, s.symbol, qty).catch((e) => setError(e.message))}
                     onPrice={(p) => updatePrice(user.uid, s.symbol, p).catch((e) => setError(e.message))}
@@ -472,7 +480,7 @@ export default function App() {
       )}
 
       <footer style={{ marginTop: 28, textAlign: 'start', color: 'var(--text-dim)', fontSize: 11.5 }}>
-        עודכן לאחרונה: {lastUpdatedLabel} · המחירים מתרעננים אוטומטית כל ~5 דקות בשעות המסחר.
+        נתונים לצורכי מידע בלבד — אינם מהווים ייעוץ השקעות.
       </footer>
     </div>
   )

@@ -48,12 +48,14 @@ async function main() {
   const digestUid = users.find((u) => u.email && u.email === digestTo)?.uid || null
   const emailSource = digestUid ? items.filter((w) => w.userId === digestUid) : items
 
-  // Assess once per unique priceSymbol (ETFs share the TA-35 proxy).
+  // Assess once per unique priceSymbol (ETFs share the TA-35 proxy). 'other' (manual-price)
+  // stocks have no Yahoo price, but still get a news-based assessment by name.
   const groups = new Map()
   for (const w of items) {
-    if (w.kind === 'other') continue // manual-price stocks have no AI/price source
     const ps = w.priceSymbol || w.symbol
-    if (!groups.has(ps)) groups.set(ps, { priceSymbol: ps, repName: w.nameHe, isIndex: snaps[ps]?.isIndex })
+    if (!ps) continue
+    const isOther = w.kind === 'other'
+    if (!groups.has(ps)) groups.set(ps, { priceSymbol: ps, repName: w.nameHe, isIndex: snaps[ps]?.isIndex, symbol: isOther ? '' : ps })
     if (snaps[ps]?.isIndex) groups.get(ps).repName = w.nameHe // prefer index name if present
   }
 
@@ -64,7 +66,7 @@ async function main() {
     try {
       geminiCalls++
       assessments[g.priceSymbol] = await assessOpen(
-        { nameHe: g.repName, symbol: g.priceSymbol, date: dateStr, isIndex: !!g.isIndex, session },
+        { nameHe: g.repName, symbol: g.symbol, date: dateStr, isIndex: !!g.isIndex, session },
         keys,
       )
     } catch (e) {
