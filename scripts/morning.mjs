@@ -10,6 +10,7 @@ import { assessOpen, buildMorningHtml } from '../lib/morning.js'
 import { bumpUsage } from '../lib/usage.js'
 import { fetchSnapshot } from '../lib/yahoo.js'
 import { explainMove } from '../lib/explain.js'
+import { telegramContext } from '../lib/telegram.js'
 
 const TZ = 'Asia/Jerusalem'
 
@@ -59,6 +60,7 @@ async function main() {
     if (snaps[ps]?.isIndex) groups.get(ps).repName = w.nameHe // prefer index name if present
   }
 
+  const news = await telegramContext() // real-time headlines to ground insights (anti-hallucination)
   const assessments = {}
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
   let geminiCalls = 0
@@ -66,7 +68,7 @@ async function main() {
     try {
       geminiCalls++
       assessments[g.priceSymbol] = await assessOpen(
-        { nameHe: g.repName, symbol: g.symbol, date: dateStr, isIndex: !!g.isIndex, session },
+        { nameHe: g.repName, symbol: g.symbol, date: dateStr, isIndex: !!g.isIndex, session, changePct: session === 'midday' ? snaps[g.priceSymbol]?.changePct : null, newsContext: news },
         keys,
       )
     } catch (e) {
@@ -109,9 +111,9 @@ async function main() {
         const mo = await fetchSnapshot(ps, { range: '1mo', interval: '1d' })
         const wkChg = pchg(wk)
         const moChg = pchg(mo)
-        const wkExp = await explainMove({ nameHe: repName, symbol: ps, changePct: wkChg, direction: wkChg >= 0 ? 'up' : 'down', date: dateStr, period: 'week' }, keys).catch(() => null)
+        const wkExp = await explainMove({ nameHe: repName, symbol: ps, changePct: wkChg, direction: wkChg >= 0 ? 'up' : 'down', date: dateStr, period: 'week', newsContext: news }, keys).catch(() => null)
         await sleep(4500)
-        const moExp = await explainMove({ nameHe: repName, symbol: ps, changePct: moChg, direction: moChg >= 0 ? 'up' : 'down', date: dateStr, period: 'month' }, keys).catch(() => null)
+        const moExp = await explainMove({ nameHe: repName, symbol: ps, changePct: moChg, direction: moChg >= 0 ? 'up' : 'down', date: dateStr, period: 'month', newsContext: news }, keys).catch(() => null)
         await sleep(4500)
         periodCalls += 2
         await db.collection('periods').doc(ps).set({

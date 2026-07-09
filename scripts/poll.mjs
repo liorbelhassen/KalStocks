@@ -11,6 +11,7 @@ import { DateTime } from 'luxon'
 import { fetchSnapshots } from '../lib/yahoo.js'
 import { classify } from '../lib/volatility.js'
 import { explainMove } from '../lib/explain.js'
+import { telegramContext } from '../lib/telegram.js'
 import { bumpUsage } from '../lib/usage.js'
 
 const TZ = 'Asia/Jerusalem'
@@ -117,12 +118,13 @@ async function main() {
   let explanationWrites = 0
   if (keys.geminiKey || keys.openaiKey) {
     const pending = await db.collection('events').where('needsExplanation', '==', true).get()
+    const news = pending.size ? await telegramContext() : ''
     let explained = 0
     for (const d of pending.docs) {
       const ev = d.data()
       try {
         geminiCalls++
-        const r = await explainMove(ev, keys)
+        const r = await explainMove({ ...ev, newsContext: news }, keys)
         await db.collection('explanations').doc(d.id).set({
           symbol: ev.symbol,
           nameHe: ev.nameHe,

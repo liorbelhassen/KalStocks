@@ -9,6 +9,7 @@ import { explainMove } from '../lib/explain.js'
 import { visionExtract } from '../lib/vision.js'
 import { askWithSearch } from '../lib/llm.js'
 import { classify } from '../lib/volatility.js'
+import { telegramContext } from '../lib/telegram.js'
 
 const ALLOWED = ['https://kalstocks1.web.app', 'http://localhost:5175', 'http://localhost:5173']
 
@@ -64,6 +65,7 @@ async function pollPrices(env) {
   const session = Math.floor(minutesInZone('Asia/Jerusalem').min / 60) < 12 ? 'morning' : 'midday'
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
   const done = new Set()
+  let news = null // fetched lazily on the first significant mover
   for (const w of wl) {
     if (w.kind === 'other') continue
     const ps = w.priceSymbol || w.symbol
@@ -74,8 +76,9 @@ async function pollPrices(env) {
     if (!c.significant || (priorBand[ps] || 0) >= c.band) continue // not significant, or level already explained
     done.add(ps)
     try {
+      if (news === null) news = await telegramContext() // fetch once, only if there's a mover to explain
       const isIndex = !!snap.isIndex
-      const a = await assessOpen({ nameHe: w.nameHe, symbol: isIndex ? '' : ps, date: dateStr, isIndex, session, changePct: snap.changePct }, keys)
+      const a = await assessOpen({ nameHe: w.nameHe, symbol: isIndex ? '' : ps, date: dateStr, isIndex, session, changePct: snap.changePct, newsContext: news }, keys)
       await patchDoc(token, sa.project_id, `briefs/${encodeURIComponent(`${ps}__${dateStr}`)}`, {
         priceSymbol: ps, date: dateStr, session, band: c.band, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], at: Date.now(),
       })
@@ -100,6 +103,7 @@ async function morningJob(env) {
 
   // Gemini (free) first, OpenAI (paid) fallback — keeps assessments reliable past Gemini's quota.
   const keys = { geminiKey: env.GEMINI_API_KEY, geminiModel: env.GEMINI_MODEL, openaiKey: env.OPENAI_API_KEY, openaiModel: env.OPENAI_MODEL }
+  const news = await telegramContext() // real-time headlines to ground the insights (anti-hallucination)
 
   const sa = JSON.parse(env.SERVICE_ACCOUNT)
   const token = await getAccessToken(sa)
@@ -132,7 +136,7 @@ async function morningJob(env) {
   const assessments = {}
   for (const g of groups.values()) {
     try {
-      assessments[g.priceSymbol] = await assessOpen({ nameHe: g.repName, symbol: g.symbol, date: dateStr, isIndex: !!g.isIndex, session, changePct: session === 'midday' ? snaps[g.priceSymbol]?.changePct : null }, keys)
+      assessments[g.priceSymbol] = await assessOpen({ nameHe: g.repName, symbol: g.symbol, date: dateStr, isIndex: !!g.isIndex, session, changePct: session === 'midday' ? snaps[g.priceSymbol]?.changePct : null, newsContext: news }, keys)
     } catch {
       /* skip */
     }
@@ -176,9 +180,9 @@ async function morningJob(env) {
       const mo = await fetchSnapshot(ps, { range: '1mo', interval: '1d' })
       const wc = pchg(wk)
       const mc = pchg(mo)
-      const we = await explainMove({ nameHe: repName, symbol: ps, changePct: wc, direction: wc >= 0 ? 'up' : 'down', date: dateStr, period: 'week' }, keys).catch(() => null)
+      const we = await explainMove({ nameHe: repName, symbol: ps, changePct: wc, direction: wc >= 0 ? 'up' : 'down', date: dateStr, period: 'week', newsContext: news }, keys).catch(() => null)
       await sleep(4500)
-      const me = await explainMove({ nameHe: repName, symbol: ps, changePct: mc, direction: mc >= 0 ? 'up' : 'down', date: dateStr, period: 'month' }, keys).catch(() => null)
+      const me = await explainMove({ nameHe: repName, symbol: ps, changePct: mc, direction: mc >= 0 ? 'up' : 'down', date: dateStr, period: 'month', newsContext: news }, keys).catch(() => null)
       await sleep(4500)
       await patchDoc(token, pid, `periods/${encodeURIComponent(ps)}`, {
         symbol: ps, updatedAt: Date.now(),
@@ -201,13 +205,14 @@ async function primeSymbol(env, symbol, nameHe, isIndex) {
   const dateStr = ilDateISO()
   const session = Math.floor(minutesInZone('Asia/Jerusalem').min / 60) < 12 ? 'morning' : 'midday'
   const keys = { geminiKey: env.GEMINI_API_KEY, geminiModel: env.GEMINI_MODEL, openaiKey: env.OPENAI_API_KEY, openaiModel: env.OPENAI_MODEL }
+  const news = await telegramContext() // ground the new stock's insight in real current headlines
 
   // Current-day change so the just-added stock's insight matches its actual direction.
   let changePct = null
   if (!symbol.startsWith('X-')) { try { changePct = (await fetchSnapshot(symbol)).changePct } catch { /* ignore */ } }
 
   try {
-    const a = await assessOpen({ nameHe, symbol: isIndex ? '' : symbol, date: dateStr, isIndex, session, changePct }, keys)
+    const a = await assessOpen({ nameHe, symbol: isIndex ? '' : symbol, date: dateStr, isIndex, session, changePct, newsContext: news }, keys)
     await patchDoc(token, pid, `briefs/${encodeURIComponent(`${symbol}__${dateStr}`)}`, {
       priceSymbol: symbol, date: dateStr, session, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], at: Date.now(),
     })
@@ -219,8 +224,8 @@ async function primeSymbol(env, symbol, nameHe, isIndex) {
     const wk = await fetchSnapshot(symbol, { range: '5d', interval: '30m' })
     const mo = await fetchSnapshot(symbol, { range: '1mo', interval: '1d' })
     const wc = pchg(wk), mc = pchg(mo)
-    const we = await explainMove({ nameHe, symbol, changePct: wc, direction: wc >= 0 ? 'up' : 'down', date: dateStr, period: 'week' }, keys).catch(() => null)
-    const me = await explainMove({ nameHe, symbol, changePct: mc, direction: mc >= 0 ? 'up' : 'down', date: dateStr, period: 'month' }, keys).catch(() => null)
+    const we = await explainMove({ nameHe, symbol, changePct: wc, direction: wc >= 0 ? 'up' : 'down', date: dateStr, period: 'week', newsContext: news }, keys).catch(() => null)
+    const me = await explainMove({ nameHe, symbol, changePct: mc, direction: mc >= 0 ? 'up' : 'down', date: dateStr, period: 'month', newsContext: news }, keys).catch(() => null)
     await patchDoc(token, pid, `periods/${encodeURIComponent(symbol)}`, {
       symbol, updatedAt: Date.now(),
       week: { changePct: Math.round(wc * 100) / 100, series: wk.series || [], explanation: we?.explanation || null, confidence: we?.confidence || null, sources: we?.sources || [] },
