@@ -196,10 +196,10 @@ export default {
         try {
           const keys = { geminiKey: env.GEMINI_API_KEY, geminiModel: env.GEMINI_MODEL, openaiKey: env.OPENAI_API_KEY, openaiModel: env.OPENAI_MODEL }
           const { text } = await askWithSearch(
-            `מהו סימול נייר הערך ב-Yahoo Finance עבור "${name}" (ככל הנראה נסחר בבורסת תל אביב, סיומת .TA)? החזר אך ורק את הסימול, למשל ALAR.TA או AAPL. אם אינך יודע, החזר NONE.`,
+            `מהו הסימול המדויק ב-Yahoo Finance עבור נייר הערך "${name}"? אם הוא נסחר בבורסת תל אביב הוסף סיומת .TA (למשל BEZQ.TA, ALAR.TA); אם בארה"ב השתמש בסימול האמריקאי (למשל MU, AAPL). החזר אך ורק את הסימול עצמו, בלי טקסט נוסף. אם אינך יודע — החזר NONE.`,
             keys, { temperature: 0 },
           )
-          const m = text.match(/\^?[A-Z]{1,10}(?:\.[A-Z]{1,3})?/)
+          const m = text.match(/\^?[A-Z]{2,6}(?:\.[A-Z]{1,3})?/)
           const ticker = m && m[0] !== 'NONE' ? m[0] : null
           if (ticker) {
             const snap = await fetchSnapshot(ticker)
