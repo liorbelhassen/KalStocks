@@ -55,7 +55,8 @@ export default function StockTile({ stock, onRemove, onQuantity, onPrice, insigh
 
       {/* 4 · sub-tabs + period insight (flexible) */}
       <div style={{ flex: 1, minWidth: 240 }}>
-        <div style={{ display: 'inline-flex', gap: 3, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 9, padding: 3, marginBottom: 7 }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 7 }}>
+        <div style={{ display: 'inline-flex', gap: 3, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 9, padding: 3 }}>
           {TABS.map(([t, lbl]) => (
             <button
               key={t}
@@ -70,6 +71,7 @@ export default function StockTile({ stock, onRemove, onQuantity, onPrice, insigh
               {lbl}
             </button>
           ))}
+        </div>
         </div>
         {view.insight ? (
           <>

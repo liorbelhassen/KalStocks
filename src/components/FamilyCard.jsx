@@ -19,14 +19,14 @@ export default function FamilyCard({ title, rep, members, insightFontSize = 14, 
   return (
     <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px' }}>
       {/* header: title + shared % + tabs */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 8 }}>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 8, minHeight: 48 }}>
         <span style={{ fontSize: 30, fontWeight: 800 }}>{title}</span>
         {hasChange && (
           <span style={{ padding: '4px 14px', borderRadius: 14, background: bg, color, fontSize: 40, fontWeight: 800, lineHeight: 1.1, direction: 'ltr' }}>
             {up ? '▲' : '▼'} {Math.abs(view.pct).toFixed(2)}%
           </span>
         )}
-        <div style={{ display: 'inline-flex', gap: 3, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 9, padding: 3, marginRight: 'auto' }}>
+        <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', display: 'inline-flex', gap: 3, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 9, padding: 3 }}>
           {TABS.map(([t, lbl]) => (
             <button key={t} onClick={() => setTab(t)} style={{ background: tab === t ? 'var(--accent)' : 'transparent', color: tab === t ? '#fff' : 'var(--text-dim)', border: 'none', borderRadius: 7, padding: '4px 14px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>{lbl}</button>
           ))}
