@@ -8,6 +8,7 @@ import { assessOpen, buildMorningHtml } from '../lib/morning.js'
 import { explainMove } from '../lib/explain.js'
 import { visionExtract } from '../lib/vision.js'
 import { askWithSearch } from '../lib/llm.js'
+import { classify } from '../lib/volatility.js'
 
 const ALLOWED = ['https://kalstocks1.web.app', 'http://localhost:5175', 'http://localhost:5173']
 
@@ -38,8 +39,10 @@ async function pollPrices(env) {
     if (p) symbols.add(p)
   })
   const snaps = await fetchSnapshots([...symbols])
+  const byPrice = {}
   for (const snap of snaps) {
     if (snap.error) continue
+    byPrice[snap.symbol] = snap
     try {
       await patchDoc(token, sa.project_id, `snapshots/${encodeURIComponent(snap.symbol)}`, {
         ...snap,
@@ -47,6 +50,38 @@ async function pollPrices(env) {
       })
     } catch {
       /* skip one symbol on failure */
+    }
+  }
+
+  // Volatility trigger: when a stock crosses its per-stock threshold, refresh its insight with a
+  // fresh, direction-aware explanation of the move. Deduped by 'band' so the same level isn't
+  // re-explained every 5 minutes.
+  if (!env.GEMINI_API_KEY && !env.OPENAI_API_KEY) return
+  const dateStr = ilDateISO()
+  const priorBand = {}
+  ;(await listDocs(token, sa.project_id, 'briefs')).forEach((b) => { if (b.date === dateStr) priorBand[b.priceSymbol] = b.band || 0 })
+  const keys = { geminiKey: env.GEMINI_API_KEY, geminiModel: env.GEMINI_MODEL, openaiKey: env.OPENAI_API_KEY, openaiModel: env.OPENAI_MODEL }
+  const session = Math.floor(minutesInZone('Asia/Jerusalem').min / 60) < 12 ? 'morning' : 'midday'
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+  const done = new Set()
+  for (const w of wl) {
+    if (w.kind === 'other') continue
+    const ps = w.priceSymbol || w.symbol
+    if (done.has(ps)) continue
+    const snap = byPrice[ps]
+    if (!snap) continue
+    const c = classify(snap, w.thresholdPct || 3)
+    if (!c.significant || (priorBand[ps] || 0) >= c.band) continue // not significant, or level already explained
+    done.add(ps)
+    try {
+      const isIndex = !!snap.isIndex
+      const a = await assessOpen({ nameHe: w.nameHe, symbol: isIndex ? '' : ps, date: dateStr, isIndex, session, changePct: snap.changePct }, keys)
+      await patchDoc(token, sa.project_id, `briefs/${encodeURIComponent(`${ps}__${dateStr}`)}`, {
+        priceSymbol: ps, date: dateStr, session, band: c.band, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], at: Date.now(),
+      })
+      await sleep(2000)
+    } catch {
+      /* skip one symbol */
     }
   }
 }
@@ -97,7 +132,7 @@ async function morningJob(env) {
   const assessments = {}
   for (const g of groups.values()) {
     try {
-      assessments[g.priceSymbol] = await assessOpen({ nameHe: g.repName, symbol: g.symbol, date: dateStr, isIndex: !!g.isIndex, session }, keys)
+      assessments[g.priceSymbol] = await assessOpen({ nameHe: g.repName, symbol: g.symbol, date: dateStr, isIndex: !!g.isIndex, session, changePct: session === 'midday' ? snaps[g.priceSymbol]?.changePct : null }, keys)
     } catch {
       /* skip */
     }
@@ -167,8 +202,12 @@ async function primeSymbol(env, symbol, nameHe, isIndex) {
   const session = Math.floor(minutesInZone('Asia/Jerusalem').min / 60) < 12 ? 'morning' : 'midday'
   const keys = { geminiKey: env.GEMINI_API_KEY, geminiModel: env.GEMINI_MODEL, openaiKey: env.OPENAI_API_KEY, openaiModel: env.OPENAI_MODEL }
 
+  // Current-day change so the just-added stock's insight matches its actual direction.
+  let changePct = null
+  if (!symbol.startsWith('X-')) { try { changePct = (await fetchSnapshot(symbol)).changePct } catch { /* ignore */ } }
+
   try {
-    const a = await assessOpen({ nameHe, symbol: isIndex ? '' : symbol, date: dateStr, isIndex, session }, keys)
+    const a = await assessOpen({ nameHe, symbol: isIndex ? '' : symbol, date: dateStr, isIndex, session, changePct }, keys)
     await patchDoc(token, pid, `briefs/${encodeURIComponent(`${symbol}__${dateStr}`)}`, {
       priceSymbol: symbol, date: dateStr, session, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], at: Date.now(),
     })
