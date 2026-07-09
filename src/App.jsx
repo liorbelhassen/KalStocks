@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import StockTile from './components/StockTile'
+import FamilyCard from './components/FamilyCard'
 import Settings from './components/Settings'
 import { searchCatalog, matchInstrument, kindLabel, sectorOf, SECTOR_ORDER } from './catalog'
 import { logoUrl, isFlag } from '../lib/logos'
@@ -188,6 +189,7 @@ export default function App() {
     return {
       key: w.symbol,
       symbol: w.symbol,
+      priceSymbol: priceSym,
       nameHe: w.nameHe,
       badge: isFlag(w.symbol, { kind: w.kind, isIndex: snap?.isIndex })
         ? { flag: true }
@@ -229,8 +231,25 @@ export default function App() {
     ? marketStocks.filter((s) => `${s.nameHe} ${s.symbol} ${s.subtitle || ''} ${s.sector || ''}`.toLowerCase().includes(f))
     : marketStocks
 
+  // Instruments sharing a priceSymbol (an index + its tracking ETFs) render as ONE unified card;
+  // the shared review + chart show once, with a compact row per member. Everything else → sectors.
+  const byPrice = {}
+  shownStocks.forEach((s) => { (byPrice[s.priceSymbol] ||= []).push(s) })
+  const families = Object.values(byPrice)
+    .filter((arr) => arr.length > 1)
+    .map((arr) => {
+      const members = [...arr].sort((a, b) => (b.isIndex ? 1 : 0) - (a.isIndex ? 1 : 0))
+      const rep = members.find((m) => m.isIndex)
+        || members.find((m) => m.explanation?.kind === 'event' || m.explanation?.kind === 'brief')
+        || members[0]
+      const title = (members.find((m) => m.isIndex)?.nameHe || rep.nameHe).replace(/^מדד\s*/, '')
+      return { priceSymbol: arr[0].priceSymbol, title, rep, members }
+    })
+  const familySyms = new Set(families.map((fam) => fam.priceSymbol))
+  const singles = shownStocks.filter((s) => !familySyms.has(s.priceSymbol))
+
   const grouped = {}
-  shownStocks.forEach((s) => {
+  singles.forEach((s) => {
     ;(grouped[s.sector] ||= []).push(s)
   })
   const sectorsPresent = [
@@ -457,6 +476,18 @@ export default function App() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {families.map((fam) => (
+            <FamilyCard
+              key={fam.priceSymbol}
+              title={fam.title}
+              rep={fam.rep}
+              members={fam.members}
+              insightFontSize={insightSize}
+              onRemove={(sym) => removeFromWatchlist(user.uid, sym)}
+              onQuantity={(sym, qty) => updateQuantity(user.uid, sym, qty).catch((e) => setError(e.message))}
+              onPrice={(sym, p) => updatePrice(user.uid, sym, p).catch((e) => setError(e.message))}
+            />
+          ))}
           {sectorsPresent.map((sec) => (
             <section key={sec}>
               <h3 style={{ margin: '0 0 8px', fontSize: 13, fontWeight: 700, color: 'var(--text-dim)', borderBottom: '1px solid var(--border)', paddingBottom: 5 }}>
