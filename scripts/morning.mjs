@@ -20,9 +20,15 @@ function initApp() {
 }
 
 async function main() {
-  const geminiKey = process.env.GEMINI_API_KEY
-  if (!geminiKey) {
-    console.log('GEMINI_API_KEY not set — cannot build morning brief.')
+  // Gemini (free) first, OpenAI (paid) fallback — keeps assessments reliable past Gemini's quota.
+  const keys = {
+    geminiKey: process.env.GEMINI_API_KEY,
+    geminiModel: process.env.GEMINI_MODEL,
+    openaiKey: process.env.OPENAI_API_KEY,
+    openaiModel: process.env.OPENAI_MODEL,
+  }
+  if (!keys.geminiKey && !keys.openaiKey) {
+    console.log('No LLM key set (GEMINI_API_KEY / OPENAI_API_KEY) — cannot build morning brief.')
     return
   }
   const db = getFirestore(initApp())
@@ -59,7 +65,7 @@ async function main() {
       geminiCalls++
       assessments[g.priceSymbol] = await assessOpen(
         { nameHe: g.repName, symbol: g.priceSymbol, date: dateStr, isIndex: !!g.isIndex, session },
-        geminiKey,
+        keys,
       )
     } catch (e) {
       console.warn(`assess failed for ${g.priceSymbol}: ${e.message}`)
@@ -101,9 +107,9 @@ async function main() {
         const mo = await fetchSnapshot(ps, { range: '1mo', interval: '1d' })
         const wkChg = pchg(wk)
         const moChg = pchg(mo)
-        const wkExp = await explainMove({ nameHe: repName, symbol: ps, changePct: wkChg, direction: wkChg >= 0 ? 'up' : 'down', date: dateStr, period: 'week' }, geminiKey).catch(() => null)
+        const wkExp = await explainMove({ nameHe: repName, symbol: ps, changePct: wkChg, direction: wkChg >= 0 ? 'up' : 'down', date: dateStr, period: 'week' }, keys).catch(() => null)
         await sleep(4500)
-        const moExp = await explainMove({ nameHe: repName, symbol: ps, changePct: moChg, direction: moChg >= 0 ? 'up' : 'down', date: dateStr, period: 'month' }, geminiKey).catch(() => null)
+        const moExp = await explainMove({ nameHe: repName, symbol: ps, changePct: moChg, direction: moChg >= 0 ? 'up' : 'down', date: dateStr, period: 'month' }, keys).catch(() => null)
         await sleep(4500)
         periodCalls += 2
         await db.collection('periods').doc(ps).set({

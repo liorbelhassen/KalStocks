@@ -56,8 +56,11 @@ const ilDateHe = () =>
 // Morning brief — reliable 09:00 Israel (Cloudflare cron fires on time). Sends the email +
 // writes today's briefs + week/month period data & explanations. Reuses the shared libs.
 async function morningJob(env) {
-  if (!env.SERVICE_ACCOUNT || !env.GEMINI_API_KEY) return
+  if (!env.SERVICE_ACCOUNT || (!env.GEMINI_API_KEY && !env.OPENAI_API_KEY)) return
   if (Math.floor(minutesInZone('Asia/Jerusalem').min / 60) !== 9) return // only the 09:xx slot (DST-safe)
+
+  // Gemini (free) first, OpenAI (paid) fallback — keeps assessments reliable past Gemini's quota.
+  const keys = { geminiKey: env.GEMINI_API_KEY, geminiModel: env.GEMINI_MODEL, openaiKey: env.OPENAI_API_KEY, openaiModel: env.OPENAI_MODEL }
 
   const sa = JSON.parse(env.SERVICE_ACCOUNT)
   const token = await getAccessToken(sa)
@@ -89,7 +92,7 @@ async function morningJob(env) {
   const assessments = {}
   for (const g of groups.values()) {
     try {
-      assessments[g.priceSymbol] = await assessOpen({ nameHe: g.repName, symbol: g.priceSymbol, date: dateStr, isIndex: !!g.isIndex, session: 'morning' }, env.GEMINI_API_KEY)
+      assessments[g.priceSymbol] = await assessOpen({ nameHe: g.repName, symbol: g.priceSymbol, date: dateStr, isIndex: !!g.isIndex, session: 'morning' }, keys)
     } catch {
       /* skip */
     }
@@ -129,9 +132,9 @@ async function morningJob(env) {
       const mo = await fetchSnapshot(ps, { range: '1mo', interval: '1d' })
       const wc = pchg(wk)
       const mc = pchg(mo)
-      const we = await explainMove({ nameHe: repName, symbol: ps, changePct: wc, direction: wc >= 0 ? 'up' : 'down', date: dateStr, period: 'week' }, env.GEMINI_API_KEY).catch(() => null)
+      const we = await explainMove({ nameHe: repName, symbol: ps, changePct: wc, direction: wc >= 0 ? 'up' : 'down', date: dateStr, period: 'week' }, keys).catch(() => null)
       await sleep(4500)
-      const me = await explainMove({ nameHe: repName, symbol: ps, changePct: mc, direction: mc >= 0 ? 'up' : 'down', date: dateStr, period: 'month' }, env.GEMINI_API_KEY).catch(() => null)
+      const me = await explainMove({ nameHe: repName, symbol: ps, changePct: mc, direction: mc >= 0 ? 'up' : 'down', date: dateStr, period: 'month' }, keys).catch(() => null)
       await sleep(4500)
       await patchDoc(token, pid, `periods/${encodeURIComponent(ps)}`, {
         symbol: ps, updatedAt: Date.now(),

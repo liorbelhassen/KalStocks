@@ -106,18 +106,23 @@ async function main() {
   }
   console.log(`Volatility: ${flagged} new/worsening event(s) flagged for explanation.`)
 
-  // 3) Phase 4 — generate explanations for flagged events (Gemini + Google Search grounding).
-  const geminiKey = process.env.GEMINI_API_KEY
+  // 3) Phase 4 — generate explanations for flagged events (Gemini free, OpenAI paid fallback).
+  const keys = {
+    geminiKey: process.env.GEMINI_API_KEY,
+    geminiModel: process.env.GEMINI_MODEL,
+    openaiKey: process.env.OPENAI_API_KEY,
+    openaiModel: process.env.OPENAI_MODEL,
+  }
   let geminiCalls = 0
   let explanationWrites = 0
-  if (geminiKey) {
+  if (keys.geminiKey || keys.openaiKey) {
     const pending = await db.collection('events').where('needsExplanation', '==', true).get()
     let explained = 0
     for (const d of pending.docs) {
       const ev = d.data()
       try {
         geminiCalls++
-        const r = await explainMove(ev, geminiKey)
+        const r = await explainMove(ev, keys)
         await db.collection('explanations').doc(d.id).set({
           symbol: ev.symbol,
           nameHe: ev.nameHe,
@@ -127,7 +132,7 @@ async function main() {
           explanation: r.explanation,
           confidence: r.confidence,
           sources: r.sources,
-          model: r.model,
+          model: r.provider,
           at: Date.now(),
         })
         await d.ref.update({ needsExplanation: false, explainedAt: Date.now() })

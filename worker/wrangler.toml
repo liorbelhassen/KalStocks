@@ -11,6 +11,7 @@ crons = ["*/5 * * * *", "0 6 * * SUN-THU", "0 7 * * SUN-THU"]
 
 # Deploy:  cd worker && wrangler deploy
 # Secrets: wrangler secret put GEMINI_API_KEY
+#          wrangler secret put OPENAI_API_KEY   # optional — fallback when Gemini's free tier is out
 #          wrangler secret put SERVICE_ACCOUNT < ../serviceAccount.json
 #          wrangler secret put RESEND_API_KEY
 #          wrangler secret put DIGEST_TO
