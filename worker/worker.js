@@ -79,6 +79,7 @@ async function morningJob(env) {
     if (snaps[ps]?.isIndex) groups.get(ps).repName = w.nameHe
   }
 
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
   const assessments = {}
   for (const g of groups.values()) {
     try {
@@ -86,6 +87,7 @@ async function morningJob(env) {
     } catch {
       /* skip */
     }
+    await sleep(4500) // pace to stay under Gemini's ~20 requests/minute free limit
   }
   for (const [ps, a] of Object.entries(assessments)) {
     await patchDoc(token, pid, `briefs/${encodeURIComponent(`${ps}__${dateStr}`)}`, {
@@ -98,7 +100,7 @@ async function morningJob(env) {
     .map((w) => {
       const ps = w.priceSymbol || w.symbol
       const a = assessments[ps] || {}
-      return { symbol: w.symbol, nameHe: w.nameHe, kind: w.kind, isIndex: snaps[ps]?.isIndex, priceIls: snaps[ps]?.priceIls, assessment: a.assessment || 'לא נמצאה הערכה.', sentiment: a.sentiment, confidence: a.confidence, sources: a.sources }
+      return { symbol: w.symbol, nameHe: w.nameHe, kind: w.kind, currency: (w.market || 'IL') === 'US' ? '$' : '₪', isIndex: snaps[ps]?.isIndex, priceIls: snaps[ps]?.priceIls, assessment: a.assessment || 'לא נמצאה הערכה.', sentiment: a.sentiment, confidence: a.confidence, sources: a.sources }
     })
   const html = buildMorningHtml({ dateStr: ilDateHe(), items: emailItems, session: 'morning' })
   if (env.RESEND_API_KEY && env.DIGEST_TO) {
@@ -122,7 +124,9 @@ async function morningJob(env) {
       const wc = pchg(wk)
       const mc = pchg(mo)
       const we = await explainMove({ nameHe: repName, symbol: ps, changePct: wc, direction: wc >= 0 ? 'up' : 'down', date: dateStr, period: 'week' }, env.GEMINI_API_KEY).catch(() => null)
+      await sleep(4500)
       const me = await explainMove({ nameHe: repName, symbol: ps, changePct: mc, direction: mc >= 0 ? 'up' : 'down', date: dateStr, period: 'month' }, env.GEMINI_API_KEY).catch(() => null)
+      await sleep(4500)
       await patchDoc(token, pid, `periods/${encodeURIComponent(ps)}`, {
         symbol: ps, updatedAt: Date.now(),
         week: { changePct: Math.round(wc * 100) / 100, series: wk.series || [], explanation: we?.explanation || null, confidence: we?.confidence || null, sources: we?.sources || [] },

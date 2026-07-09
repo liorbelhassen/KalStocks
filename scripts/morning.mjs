@@ -45,6 +45,7 @@ async function main() {
   }
 
   const assessments = {}
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
   let geminiCalls = 0
   for (const g of groups.values()) {
     try {
@@ -56,6 +57,7 @@ async function main() {
     } catch (e) {
       console.warn(`assess failed for ${g.priceSymbol}: ${e.message}`)
     }
+    await sleep(4500) // pace to stay under Gemini's ~20 requests/minute free limit
   }
   // Persist assessments as dashboard "baseline insights" (so every stock always shows something).
   let briefWrites = 0
@@ -93,7 +95,9 @@ async function main() {
         const wkChg = pchg(wk)
         const moChg = pchg(mo)
         const wkExp = await explainMove({ nameHe: repName, symbol: ps, changePct: wkChg, direction: wkChg >= 0 ? 'up' : 'down', date: dateStr, period: 'week' }, geminiKey).catch(() => null)
+        await sleep(4500)
         const moExp = await explainMove({ nameHe: repName, symbol: ps, changePct: moChg, direction: moChg >= 0 ? 'up' : 'down', date: dateStr, period: 'month' }, geminiKey).catch(() => null)
+        await sleep(4500)
         periodCalls += 2
         await db.collection('periods').doc(ps).set({
           symbol: ps,
@@ -109,21 +113,24 @@ async function main() {
     console.log(`Periods: updated ${priceSyms.size} symbols.`)
   }
 
-  const emailItems = items.map((w) => {
-    const ps = w.priceSymbol || w.symbol
-    const a = assessments[ps] || {}
-    return {
-      symbol: w.symbol,
-      nameHe: w.nameHe,
-      kind: w.kind,
-      isIndex: snaps[ps]?.isIndex,
-      priceIls: snaps[ps]?.priceIls,
-      assessment: a.assessment || 'לא נמצאה הערכה.',
-      sentiment: a.sentiment,
-      confidence: a.confidence,
-      sources: a.sources,
-    }
-  })
+  const emailItems = items
+    .filter((w) => w.kind !== 'other')
+    .map((w) => {
+      const ps = w.priceSymbol || w.symbol
+      const a = assessments[ps] || {}
+      return {
+        symbol: w.symbol,
+        nameHe: w.nameHe,
+        kind: w.kind,
+        currency: (w.market || 'IL') === 'US' ? '$' : '₪',
+        isIndex: snaps[ps]?.isIndex,
+        priceIls: snaps[ps]?.priceIls,
+        assessment: a.assessment || 'לא נמצאה הערכה.',
+        sentiment: a.sentiment,
+        confidence: a.confidence,
+        sources: a.sources,
+      }
+    })
 
   // The midday run refreshes the dashboard insight only — no email (the 13:00 digest covers email).
   if (session !== 'morning') {
