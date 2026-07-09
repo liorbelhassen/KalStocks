@@ -5,7 +5,7 @@ import Settings from './components/Settings'
 import { searchCatalog, matchInstrument, kindLabel, sectorOf, SECTOR_ORDER } from './catalog'
 import { logoUrl, isFlag } from '../lib/logos'
 import { subscribeWatchlist, addToWatchlist, removeFromWatchlist, updateThreshold, updateQuantity, updatePrice, adoptLegacyWatchlist } from './services/watchlist'
-import { analyzeScreenshot, quoteSymbol, searchYahoo } from './services/vision'
+import { analyzeScreenshot, quoteSymbol, searchYahoo, resolveSymbol } from './services/vision'
 import { subscribeAuth, signOutUser } from './services/auth'
 import Login from './components/Login'
 
@@ -142,11 +142,22 @@ export default function App() {
           loadQuote(match.priceSymbol || match.symbol)
           added++
         } else {
-          // Not in the catalog (small-caps etc.) — add anyway with manual pricing, so nothing is dropped.
-          const sym = 'X-' + h.name.trim().replace(/[/.#$[\]]/g, '-').slice(0, 40)
-          await addToWatchlist(user.uid, { symbol: sym, nameHe: h.name.trim(), priceSymbol: sym, kind: 'other', quantity: h.quantity ?? undefined })
-          manualAdded.push(h.name.trim())
-          added++
+          // Not in the catalog — resolve the name to a real Yahoo ticker so it behaves like any
+          // other stock (live price, chart, reviews). Only if that fails do we fall back to manual.
+          const resolved = await resolveSymbol(h.name)
+          if (resolved) {
+            const kind = resolved.quoteType === 'INDEX' ? 'index' : resolved.quoteType === 'ETF' ? 'etf' : 'equity'
+            const market = resolved.symbol.endsWith('.TA') ? 'IL' : 'US'
+            await addToWatchlist(user.uid, { symbol: resolved.symbol, nameHe: h.name.trim(), priceSymbol: resolved.symbol, kind, market, quantity: h.quantity ?? undefined })
+            loadQuote(resolved.symbol)
+            added++
+          } else {
+            // Truly unresolvable — add with manual pricing so nothing is dropped.
+            const sym = 'X-' + h.name.trim().replace(/[/.#$[\]]/g, '-').slice(0, 40)
+            await addToWatchlist(user.uid, { symbol: sym, nameHe: h.name.trim(), priceSymbol: sym, kind: 'other', quantity: h.quantity ?? undefined })
+            manualAdded.push(h.name.trim())
+            added++
+          }
         }
       }
       setImportMsg(

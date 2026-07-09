@@ -43,6 +43,24 @@ export async function searchYahoo(query) {
   }
 }
 
+// Resolve a (possibly Hebrew) instrument name to a real Yahoo ticker so it's treated like any
+// other stock. Returns { symbol, name, quoteType } or null. Used when an imported name isn't in
+// the catalog — avoids dead 'other' entries.
+export async function resolveSymbol(name) {
+  if (!VISION_URL || !name || !name.trim()) return null
+  try {
+    const res = await fetch(VISION_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'resolve', name: name.trim() }),
+    })
+    const data = await res.json().catch(() => ({}))
+    return res.ok && data.symbol ? data : null
+  } catch {
+    return null
+  }
+}
+
 export async function analyzeScreenshot(file) {
   if (!VISION_URL) throw new Error('שירות הזיהוי טרם הוגדר (VITE_VISION_URL).')
   const imageBase64 = await fileToBase64(file)

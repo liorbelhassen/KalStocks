@@ -7,6 +7,7 @@ import { getAccessToken, listDocs, patchDoc } from './firestore.js'
 import { assessOpen, buildMorningHtml } from '../lib/morning.js'
 import { explainMove } from '../lib/explain.js'
 import { visionExtract } from '../lib/vision.js'
+import { askWithSearch } from '../lib/llm.js'
 
 const ALLOWED = ['https://kalstocks1.web.app', 'http://localhost:5175', 'http://localhost:5173']
 
@@ -175,6 +176,40 @@ export default {
     if (request.method !== 'POST') return json({ error: 'POST only' }, 405, origin)
     try {
       const body = await request.json()
+
+      // Action: resolve a (possibly Hebrew) instrument name to a real Yahoo ticker, so a stock
+      // added by any user gets full price/chart/reviews — never a dead 'other' entry.
+      if (body.action === 'resolve') {
+        const name = (body.name || '').trim()
+        if (!name) return json({ notFound: true }, 200, origin)
+        // 1) Yahoo search (works for tickers + English names).
+        try {
+          const r = await fetch(
+            `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(name)}&quotesCount=6&newsCount=0`,
+            { headers: { 'User-Agent': 'Mozilla/5.0 (KalStocks)' } },
+          )
+          const d = await r.json()
+          const hit = (d.quotes || []).find((x) => x.symbol && ['EQUITY', 'ETF', 'INDEX'].includes(x.quoteType))
+          if (hit) return json({ symbol: hit.symbol, name: hit.shortname || hit.longname || hit.symbol, quoteType: hit.quoteType, via: 'search' }, 200, origin)
+        } catch { /* fall through */ }
+        // 2) LLM (web-grounded) name → ticker, verified against a live Yahoo quote.
+        try {
+          const keys = { geminiKey: env.GEMINI_API_KEY, geminiModel: env.GEMINI_MODEL, openaiKey: env.OPENAI_API_KEY, openaiModel: env.OPENAI_MODEL }
+          const { text } = await askWithSearch(
+            `מהו סימול נייר הערך ב-Yahoo Finance עבור "${name}" (ככל הנראה נסחר בבורסת תל אביב, סיומת .TA)? החזר אך ורק את הסימול, למשל ALAR.TA או AAPL. אם אינך יודע, החזר NONE.`,
+            keys, { temperature: 0 },
+          )
+          const m = text.match(/\^?[A-Z]{1,10}(?:\.[A-Z]{1,3})?/)
+          const ticker = m && m[0] !== 'NONE' ? m[0] : null
+          if (ticker) {
+            const snap = await fetchSnapshot(ticker)
+            if (snap && snap.priceIls != null) {
+              return json({ symbol: ticker, name, quoteType: snap.isIndex ? 'INDEX' : 'EQUITY', via: 'llm' }, 200, origin)
+            }
+          }
+        } catch { /* fall through */ }
+        return json({ notFound: true }, 200, origin)
+      }
 
       // Action: search Yahoo by name/ticker — finds any stock, not just the catalog.
       if (body.action === 'search') {
