@@ -70,6 +70,12 @@ async function morningJob(env) {
     if (s.symbol) snaps[s.symbol] = s
   })
 
+  // Digest goes only to DIGEST_TO for now → email only that user's own portfolio.
+  // Shared AI/price data below is still computed over every user's symbols (the union).
+  const users = await listDocs(token, pid, 'users')
+  const digestUid = users.find((u) => u.email && u.email === env.DIGEST_TO)?.uid || null
+  const emailSource = digestUid ? items.filter((w) => w.userId === digestUid) : items
+
   const groups = new Map()
   for (const w of items) {
     if (w.kind === 'other') continue
@@ -95,7 +101,7 @@ async function morningJob(env) {
     })
   }
 
-  const emailItems = items
+  const emailItems = emailSource
     .filter((w) => w.kind !== 'other')
     .map((w) => {
       const ps = w.priceSymbol || w.symbol

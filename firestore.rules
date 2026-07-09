@@ -5,6 +5,12 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // The owner of the original single-user data — allowed to adopt the legacy 'me' watchlist into
+    // their account on first login. MUST match their Google login email and VITE_ADMIN_EMAIL.
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'lior.belhassen@redis.com';
+    }
+
     // Market data is written only by backend functions (admin), read is public/non-sensitive.
     match /snapshots/{doc}   { allow read: if true; allow write: if false; }
     match /events/{doc}      { allow read: if true; allow write: if false; }
@@ -14,9 +20,21 @@ service cloud.firestore {
     match /alerts_sent/{doc} { allow read: if false; allow write: if false; }
     match /usage/{doc}       { allow read: if false; allow write: if false; }
 
-    // Per-user watchlist. TODO Phase 2/5: lock to request.auth.uid == userId once Auth is wired.
+    // Per-user watchlist: a signed-in user may only touch rows they own (userId == their uid).
+    // List queries must be constrained to the user's own rows (the app filters by userId).
+    // Exception: the admin may read+delete the legacy 'me' rows to migrate them once.
     match /watchlist/{doc} {
-      allow read, write: if true;
+      allow read:   if request.auth != null && (resource.data.userId == request.auth.uid
+                        || (resource.data.userId == 'me' && isAdmin()));
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow delete: if request.auth != null && (resource.data.userId == request.auth.uid
+                        || (resource.data.userId == 'me' && isAdmin()));
+    }
+
+    // User profile (email/name), used to map an email → uid for the digest. Own doc only.
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
     }
   }
 }

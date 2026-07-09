@@ -3,8 +3,10 @@ import StockTile from './components/StockTile'
 import Settings from './components/Settings'
 import { searchCatalog, matchInstrument, kindLabel, sectorOf, SECTOR_ORDER } from './catalog'
 import { logoUrl, isFlag } from '../lib/logos'
-import { subscribeWatchlist, addToWatchlist, removeFromWatchlist, updateThreshold, updateQuantity, updatePrice } from './services/watchlist'
+import { subscribeWatchlist, addToWatchlist, removeFromWatchlist, updateThreshold, updateQuantity, updatePrice, adoptLegacyWatchlist } from './services/watchlist'
 import { analyzeScreenshot, quoteSymbol, searchYahoo } from './services/vision'
+import { subscribeAuth, signOutUser } from './services/auth'
+import Login from './components/Login'
 
 const fmtIls = (n) => (n ?? 0).toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 import { subscribeSnapshots } from './services/snapshots'
@@ -13,6 +15,8 @@ import { subscribeBriefs } from './services/briefs'
 import { subscribePeriods } from './services/periods'
 
 export default function App() {
+  const [user, setUser] = useState(null)
+  const [authReady, setAuthReady] = useState(false)
   const [watchlist, setWatchlist] = useState([])
   const [snapshots, setSnapshots] = useState({})
   const [explanations, setExplanations] = useState({})
@@ -31,8 +35,18 @@ export default function App() {
   const boxRef = useRef(null)
   const fileRef = useRef(null)
 
+  // Track the signed-in user (session is restored automatically on reload).
+  useEffect(() => subscribeAuth((u) => { setUser(u); setAuthReady(true) }), [])
+
+  // Live data — only while signed in. The watchlist is scoped to the user's uid; market data and
+  // AI insights (snapshots/explanations/briefs/periods) are shared across all users by symbol.
   useEffect(() => {
-    const unsubW = subscribeWatchlist(setWatchlist, (e) => setError(e.message))
+    if (!user) return
+    // One-time: adopt the legacy single-user portfolio into the admin's account.
+    const adminEmail = import.meta.env.VITE_ADMIN_EMAIL
+    if (adminEmail && user.email === adminEmail) adoptLegacyWatchlist(user.uid).catch(() => {})
+
+    const unsubW = subscribeWatchlist(user.uid, setWatchlist, (e) => setError(e.message))
     const unsubS = subscribeSnapshots(setSnapshots, (e) => setError(e.message))
     const unsubE = subscribeExplanations(setExplanations, (e) => setError(e.message))
     const unsubB = subscribeBriefs(setBriefs, (e) => setError(e.message))
@@ -44,7 +58,7 @@ export default function App() {
       unsubB()
       unsubP()
     }
-  }, [])
+  }, [user])
 
   // Close the dropdown on outside click.
   useEffect(() => {
@@ -63,6 +77,16 @@ export default function App() {
     }, 250)
     return () => clearTimeout(t)
   }, [q, open])
+
+  // Auth gate — nothing below renders until we know who (if anyone) is signed in.
+  if (!authReady) {
+    return (
+      <div dir="rtl" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-dim)' }}>
+        טוען…
+      </div>
+    )
+  }
+  if (!user) return <Login />
 
   const owned = watchlist.map((w) => w.symbol)
   const results = open ? searchCatalog(q, { excludeSymbols: owned, market }) : []
@@ -89,7 +113,7 @@ export default function App() {
 
   const add = async (item) => {
     try {
-      await addToWatchlist(item)
+      await addToWatchlist(user.uid, item)
       setQ('')
       setOpen(false)
       loadQuote(item.priceSymbol || item.symbol) // instant data, don't wait for the poller
@@ -111,13 +135,13 @@ export default function App() {
       for (const h of holdings) {
         const match = matchInstrument(h.name)
         if (match) {
-          await addToWatchlist({ ...match, quantity: h.quantity ?? undefined })
+          await addToWatchlist(user.uid, { ...match, quantity: h.quantity ?? undefined })
           loadQuote(match.priceSymbol || match.symbol)
           added++
         } else {
           // Not in the catalog (small-caps etc.) — add anyway with manual pricing, so nothing is dropped.
           const sym = 'X-' + h.name.trim().replace(/[/.#$[\]]/g, '-').slice(0, 40)
-          await addToWatchlist({ symbol: sym, nameHe: h.name.trim(), priceSymbol: sym, kind: 'other', quantity: h.quantity ?? undefined })
+          await addToWatchlist(user.uid, { symbol: sym, nameHe: h.name.trim(), priceSymbol: sym, kind: 'other', quantity: h.quantity ?? undefined })
           manualAdded.push(h.name.trim())
           added++
         }
@@ -242,6 +266,34 @@ export default function App() {
             >
               ⚙️ הגדרות
             </button>
+            <div
+              title={user.email || ''}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, background: 'var(--panel)',
+                border: '1px solid var(--border)', borderRadius: 10, padding: '5px 8px 5px 12px',
+              }}
+            >
+              {user.photoURL ? (
+                <img src={user.photoURL} alt="" width={26} height={26} style={{ borderRadius: '50%' }} referrerPolicy="no-referrer" />
+              ) : (
+                <span style={{
+                  width: 26, height: 26, borderRadius: '50%', background: 'var(--accent)', color: '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700,
+                }}>
+                  {(user.displayName || user.email || '?').trim().charAt(0).toUpperCase()}
+                </span>
+              )}
+              <span style={{ fontSize: 13, color: 'var(--text)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {user.displayName || user.email}
+              </span>
+              <button
+                onClick={() => signOutUser().catch((e) => setError(e.message))}
+                title="התנתק"
+                style={{ background: 'none', border: 'none', color: 'var(--text-dim)', fontSize: 13, cursor: 'pointer', padding: '2px 4px' }}
+              >
+                יציאה
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -267,7 +319,7 @@ export default function App() {
         <Settings
           watchlist={watchlist}
           onClose={() => setSettingsOpen(false)}
-          onUpdate={(symbol, thr) => updateThreshold(symbol, thr).catch((e) => setError(e.message))}
+          onUpdate={(symbol, thr) => updateThreshold(user.uid, symbol, thr).catch((e) => setError(e.message))}
         />
       )}
 
@@ -408,9 +460,9 @@ export default function App() {
                   <StockTile
                     key={s.key}
                     stock={s}
-                    onRemove={() => removeFromWatchlist(s.symbol)}
-                    onQuantity={(qty) => updateQuantity(s.symbol, qty).catch((e) => setError(e.message))}
-                    onPrice={(p) => updatePrice(s.symbol, p).catch((e) => setError(e.message))}
+                    onRemove={() => removeFromWatchlist(user.uid, s.symbol)}
+                    onQuantity={(qty) => updateQuantity(user.uid, s.symbol, qty).catch((e) => setError(e.message))}
+                    onPrice={(p) => updatePrice(user.uid, s.symbol, p).catch((e) => setError(e.message))}
                   />
                 ))}
               </div>

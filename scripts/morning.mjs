@@ -35,6 +35,13 @@ async function main() {
   const snaps = {}
   ;(await db.collection('snapshots').get()).forEach((d) => (snaps[d.id] = d.data()))
 
+  // The digest goes only to DIGEST_TO for now → email only that user's own portfolio.
+  // Shared AI/price data below is still computed over EVERY user's symbols (the union).
+  const digestTo = process.env.DIGEST_TO
+  const users = (await db.collection('users').get()).docs.map((d) => d.data())
+  const digestUid = users.find((u) => u.email && u.email === digestTo)?.uid || null
+  const emailSource = digestUid ? items.filter((w) => w.userId === digestUid) : items
+
   // Assess once per unique priceSymbol (ETFs share the TA-35 proxy).
   const groups = new Map()
   for (const w of items) {
@@ -113,7 +120,7 @@ async function main() {
     console.log(`Periods: updated ${priceSyms.size} symbols.`)
   }
 
-  const emailItems = items
+  const emailItems = emailSource
     .filter((w) => w.kind !== 'other')
     .map((w) => {
       const ps = w.priceSymbol || w.symbol
