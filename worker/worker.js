@@ -59,7 +59,9 @@ const ilDateHe = () =>
 // writes today's briefs + week/month period data & explanations. Reuses the shared libs.
 async function morningJob(env) {
   if (!env.SERVICE_ACCOUNT || (!env.GEMINI_API_KEY && !env.OPENAI_API_KEY)) return
-  if (Math.floor(minutesInZone('Asia/Jerusalem').min / 60) !== 9) return // only the 09:xx slot (DST-safe)
+  const ilHour = Math.floor(minutesInZone('Asia/Jerusalem').min / 60)
+  const session = ilHour === 9 ? 'morning' : ilHour === 13 ? 'midday' : null
+  if (!session) return // only the 09:xx (morning brief + email) or 13:xx (midday refresh) slots — DST-safe
 
   // Gemini (free) first, OpenAI (paid) fallback — keeps assessments reliable past Gemini's quota.
   const keys = { geminiKey: env.GEMINI_API_KEY, geminiModel: env.GEMINI_MODEL, openaiKey: env.OPENAI_API_KEY, openaiModel: env.OPENAI_MODEL }
@@ -95,7 +97,7 @@ async function morningJob(env) {
   const assessments = {}
   for (const g of groups.values()) {
     try {
-      assessments[g.priceSymbol] = await assessOpen({ nameHe: g.repName, symbol: g.symbol, date: dateStr, isIndex: !!g.isIndex, session: 'morning' }, keys)
+      assessments[g.priceSymbol] = await assessOpen({ nameHe: g.repName, symbol: g.symbol, date: dateStr, isIndex: !!g.isIndex, session }, keys)
     } catch {
       /* skip */
     }
@@ -103,9 +105,12 @@ async function morningJob(env) {
   }
   for (const [ps, a] of Object.entries(assessments)) {
     await patchDoc(token, pid, `briefs/${encodeURIComponent(`${ps}__${dateStr}`)}`, {
-      priceSymbol: ps, date: dateStr, session: 'morning', assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], at: Date.now(),
+      priceSymbol: ps, date: dateStr, session, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], at: Date.now(),
     })
   }
+
+  // Midday only refreshes the dashboard insights (session-aware) — no email, no period recompute.
+  if (session !== 'morning') { console.log('midday refresh done for', dateStr); return }
 
   const emailItems = emailSource
     .filter((w) => w.kind !== 'other')

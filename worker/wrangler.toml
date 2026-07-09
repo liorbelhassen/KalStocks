@@ -5,9 +5,10 @@ compatibility_flags = ["nodejs_compat"]
 
 # Reliable crons (fire on time, unlike GitHub Actions):
 #  - every 5 min: price poll
-#  - 06:00 & 07:00 UTC: morning brief (the job runs only at the 09:00 Israel slot — handles DST)
+#  - 06:00/07:00 UTC → 09:00 Israel morning brief (+email); 10:00/11:00 UTC → 13:00 Israel midday
+#    refresh. The job gates by Israel hour (9 or 13), so the extra UTC slot covers DST.
 [triggers]
-crons = ["*/5 * * * *", "0 6 * * SUN-THU", "0 7 * * SUN-THU"]
+crons = ["*/5 * * * *", "0 6 * * SUN-THU", "0 7 * * SUN-THU", "0 10 * * SUN-THU", "0 11 * * SUN-THU"]
 
 # Deploy:  cd worker && wrangler deploy
 # Secrets: wrangler secret put GEMINI_API_KEY

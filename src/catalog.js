@@ -38,6 +38,10 @@ export const CATALOG = [
   { symbol: 'NVMI.TA', nameHe: 'נובה', kind: 'equity', priceSymbol: 'NVMI.TA', aliases: ['nova'] },
   { symbol: 'ENOG.TA', nameHe: "אנרג'יאן", kind: 'equity', priceSymbol: 'ENOG.TA', aliases: ['אנרגיאן', 'גז', 'energean'] },
   { symbol: 'AZRG.TA', nameHe: 'עזריאלי', kind: 'equity', priceSymbol: 'AZRG.TA', aliases: ['נדל"ן', 'azrieli'] },
+  { symbol: 'MGDL.TA', nameHe: 'מגדל ביטוח', kind: 'equity', priceSymbol: 'MGDL.TA', aliases: ['מגדל', 'ביטוח', 'migdal', 'insurance'] },
+  { symbol: 'HARL.TA', nameHe: 'הראל ביטוח', kind: 'equity', priceSymbol: 'HARL.TA', aliases: ['הראל', 'ביטוח', 'harel', 'insurance'] },
+  { symbol: 'CLIS.TA', nameHe: 'כלל ביטוח', kind: 'equity', priceSymbol: 'CLIS.TA', aliases: ['כלל', 'ביטוח', 'clal', 'insurance'] },
+  { symbol: 'SKBN.TA', nameHe: 'שיכון ובינוי', kind: 'equity', priceSymbol: 'SKBN.TA', aliases: ['שיכון', 'בינוי', 'נדל"ן', 'shikun', 'binui'] },
 
   // ── USA ── (Yahoo prices US tickers directly; US ETFs like SPY/QQQ are priced, not proxied)
   { symbol: '^GSPC', nameHe: 'מדד S&P 500', kind: 'index', priceSymbol: '^GSPC', market: 'US', aliases: ['sp500', 's&p', 'ספי', 'אס אנד פי'] },
@@ -70,6 +74,7 @@ const SECTORS = {
   'POLI.TA': 'בנקים', 'LUMI.TA': 'בנקים', 'MZTF.TA': 'בנקים', 'DSCT.TA': 'בנקים', 'FIBI.TA': 'בנקים',
   'TEVA.TA': 'פארמה', 'NICE.TA': 'טכנולוגיה', 'ESLT.TA': 'ביטחוניות', 'ICL.TA': 'כימיה',
   'BEZQ.TA': 'תקשורת', 'TSEM.TA': 'שבבים', 'NVMI.TA': 'שבבים', 'ENOG.TA': 'אנרגיה', 'AZRG.TA': 'נדל"ן',
+  'MGDL.TA': 'ביטוח', 'HARL.TA': 'ביטוח', 'CLIS.TA': 'ביטוח', 'SKBN.TA': 'נדל"ן',
   // USA
   '^GSPC': 'מדדים', '^IXIC': 'מדדים', '^DJI': 'מדדים', 'SPY': 'קרנות סל', 'QQQ': 'קרנות סל',
   'AAPL': 'טכנולוגיה', 'MSFT': 'טכנולוגיה', 'GOOGL': 'טכנולוגיה', 'AMZN': 'טכנולוגיה', 'META': 'טכנולוגיה',
