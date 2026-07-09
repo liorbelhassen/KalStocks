@@ -8,7 +8,7 @@ service cloud.firestore {
     // The owner of the original single-user data — allowed to adopt the legacy 'me' watchlist into
     // their account on first login. MUST match their Google login email and VITE_ADMIN_EMAIL.
     function isAdmin() {
-      return request.auth != null && request.auth.token.email == 'lior.belhassen@redis.com';
+      return request.auth != null && request.auth.token.email == 'lior.belhassen@gmail.com';
     }
 
     // Market data is written only by backend functions (admin), read is public/non-sensitive.
