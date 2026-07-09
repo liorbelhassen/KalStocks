@@ -70,7 +70,10 @@ async function main() {
     body: JSON.stringify({ from, to, subject: `StocksInsights — סיכום ${timeLabel} · ${dateStr}`, html }),
   })
   const body = await res.text()
-  if (!res.ok) throw new Error(`Resend ${res.status}: ${body.slice(0, 300)}`)
+  if (!res.ok) {
+    console.warn(`Digest email not sent — Resend ${res.status}: ${body.slice(0, 200)}`)
+    return
+  }
   await bumpUsage(db, dateStr, { emailsSent: 1 })
   console.log(`Digest sent to ${to}. ${body.slice(0, 120)}`)
 }

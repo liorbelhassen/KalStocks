@@ -168,7 +168,11 @@ async function main() {
     body: JSON.stringify({ from, to, subject: `☀️ סקירת בוקר StocksInsights · ${dateStr}`, html }),
   })
   const body = await res.text()
-  if (!res.ok) throw new Error(`Resend ${res.status}: ${body.slice(0, 300)}`)
+  if (!res.ok) {
+    // Non-fatal: the dashboard data was already written; a bad email key shouldn't fail the job.
+    console.warn(`Morning email not sent — Resend ${res.status}: ${body.slice(0, 200)}`)
+    return
+  }
   await bumpUsage(db, dateStr, { emailsSent: 1 })
   console.log(`Morning brief sent to ${to}.`)
 }

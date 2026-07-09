@@ -6,9 +6,8 @@ name: poll-prices
 # exit immediately without touching Firestore. NOTE: GitHub scheduled crons are best-effort and
 # can be delayed several minutes under load — expect ~5–15 min freshness, not exact 5-min ticks.
 on:
-  schedule:
-    # 06–21 UTC covers TASE (Sun–Thu) + US markets (Mon–Fri); poll.mjs gates the exact hours.
-    - cron: '*/5 6-21 * * 0-5'
+  # Scheduling moved to the Cloudflare Worker cron (reliable, and avoids double-polling).
+  # Kept as a manual backup only.
   workflow_dispatch: {} # manual "Run workflow" button (also lets you force a poll)
 
 jobs:

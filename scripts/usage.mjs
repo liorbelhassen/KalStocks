@@ -41,7 +41,10 @@ async function main() {
     body: JSON.stringify({ from, to, subject: `📊 מוניטור מכסות StocksInsights · ${yStr}`, html }),
   })
   const body = await res.text()
-  if (!res.ok) throw new Error(`Resend ${res.status}: ${body.slice(0, 300)}`)
+  if (!res.ok) {
+    console.warn(`Usage email not sent — Resend ${res.status}: ${body.slice(0, 200)}`)
+    return
+  }
   console.log(`Usage report sent to ${to}.`)
 }
 
