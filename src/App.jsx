@@ -5,7 +5,7 @@ import Settings from './components/Settings'
 import { searchCatalog, matchInstrument, kindLabel, sectorOf, SECTOR_ORDER } from './catalog'
 import { logoUrl, isFlag } from '../lib/logos'
 import { subscribeWatchlist, addToWatchlist, removeFromWatchlist, updateThreshold, updateQuantity, updatePrice, adoptLegacyWatchlist } from './services/watchlist'
-import { analyzeScreenshot, quoteSymbol, searchYahoo, resolveSymbol } from './services/vision'
+import { analyzeScreenshot, quoteSymbol, searchYahoo, resolveSymbol, primeInstrument } from './services/vision'
 import { subscribeAuth, signOutUser } from './services/auth'
 import Login from './components/Login'
 
@@ -119,7 +119,9 @@ export default function App() {
       await addToWatchlist(user.uid, item)
       setQ('')
       setOpen(false)
-      loadQuote(item.priceSymbol || item.symbol) // instant data, don't wait for the poller
+      const ps = item.priceSymbol || item.symbol
+      loadQuote(ps) // instant price, don't wait for the poller
+      primeInstrument(ps, item.nameHe, item.kind === 'index') // generate reviews now, not at morning
     } catch (err) {
       setError(err.message)
     }
@@ -138,8 +140,10 @@ export default function App() {
       for (const h of holdings) {
         const match = matchInstrument(h.name)
         if (match) {
+          const ps = match.priceSymbol || match.symbol
           await addToWatchlist(user.uid, { ...match, quantity: h.quantity ?? undefined })
-          loadQuote(match.priceSymbol || match.symbol)
+          loadQuote(ps)
+          primeInstrument(ps, match.nameHe, match.kind === 'index')
           added++
         } else {
           // Not in the catalog — resolve the name to a real Yahoo ticker so it behaves like any
@@ -150,11 +154,13 @@ export default function App() {
             const market = resolved.symbol.endsWith('.TA') ? 'IL' : 'US'
             await addToWatchlist(user.uid, { symbol: resolved.symbol, nameHe: h.name.trim(), priceSymbol: resolved.symbol, kind, market, quantity: h.quantity ?? undefined })
             loadQuote(resolved.symbol)
+            primeInstrument(resolved.symbol, h.name.trim(), resolved.quoteType === 'INDEX')
             added++
           } else {
             // Truly unresolvable — add with manual pricing so nothing is dropped.
             const sym = 'X-' + h.name.trim().replace(/[/.#$[\]]/g, '-').slice(0, 40)
             await addToWatchlist(user.uid, { symbol: sym, nameHe: h.name.trim(), priceSymbol: sym, kind: 'other', quantity: h.quantity ?? undefined })
+            primeInstrument(sym, h.name.trim(), false)
             manualAdded.push(h.name.trim())
             added++
           }

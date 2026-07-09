@@ -152,6 +152,39 @@ async function morningJob(env) {
   console.log('morning job done for', dateStr)
 }
 
+// On-demand generation for a single instrument (when a user just added it) — today's brief +
+// week/month periods, so the reviews appear within seconds instead of waiting for the morning cron.
+async function primeSymbol(env, symbol, nameHe, isIndex) {
+  const sa = JSON.parse(env.SERVICE_ACCOUNT)
+  const token = await getAccessToken(sa)
+  const pid = sa.project_id
+  const dateStr = ilDateISO()
+  const session = Math.floor(minutesInZone('Asia/Jerusalem').min / 60) < 12 ? 'morning' : 'midday'
+  const keys = { geminiKey: env.GEMINI_API_KEY, geminiModel: env.GEMINI_MODEL, openaiKey: env.OPENAI_API_KEY, openaiModel: env.OPENAI_MODEL }
+
+  try {
+    const a = await assessOpen({ nameHe, symbol: isIndex ? '' : symbol, date: dateStr, isIndex, session }, keys)
+    await patchDoc(token, pid, `briefs/${encodeURIComponent(`${symbol}__${dateStr}`)}`, {
+      priceSymbol: symbol, date: dateStr, session, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], at: Date.now(),
+    })
+  } catch (e) { console.log('prime brief error', String(e)) }
+
+  if (symbol.startsWith('X-')) return // manual-price stocks have no Yahoo series
+  try {
+    const pchg = (snap) => { const v = (snap.series || []).map((p) => p.v).filter((x) => x != null); return v.length > 1 ? ((v[v.length - 1] - v[0]) / v[0]) * 100 : 0 }
+    const wk = await fetchSnapshot(symbol, { range: '5d', interval: '30m' })
+    const mo = await fetchSnapshot(symbol, { range: '1mo', interval: '1d' })
+    const wc = pchg(wk), mc = pchg(mo)
+    const we = await explainMove({ nameHe, symbol, changePct: wc, direction: wc >= 0 ? 'up' : 'down', date: dateStr, period: 'week' }, keys).catch(() => null)
+    const me = await explainMove({ nameHe, symbol, changePct: mc, direction: mc >= 0 ? 'up' : 'down', date: dateStr, period: 'month' }, keys).catch(() => null)
+    await patchDoc(token, pid, `periods/${encodeURIComponent(symbol)}`, {
+      symbol, updatedAt: Date.now(),
+      week: { changePct: Math.round(wc * 100) / 100, series: wk.series || [], explanation: we?.explanation || null, confidence: we?.confidence || null, sources: we?.sources || [] },
+      month: { changePct: Math.round(mc * 100) / 100, series: mo.series || [], explanation: me?.explanation || null, confidence: me?.confidence || null, sources: me?.sources || [] },
+    })
+  } catch (e) { console.log('prime periods error', String(e)) }
+}
+
 function cors(origin) {
   const allow = ALLOWED.includes(origin) ? origin : ALLOWED[0]
   return {
@@ -170,12 +203,22 @@ const PROMPT = `זהו צילום מסך של תיק/רשימת מניות מא�
 (כמות = מספר, או ריק אם לא מוצג). בלי שום טקסט אחר, בלי כותרות.`
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const origin = request.headers.get('Origin') || ''
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors(origin) })
     if (request.method !== 'POST') return json({ error: 'POST only' }, 405, origin)
     try {
       const body = await request.json()
+
+      // Action: generate today/week/month reviews for a just-added instrument, in the background,
+      // so they appear within seconds (no waiting for the morning cron).
+      if (body.action === 'prime') {
+        const { symbol, nameHe, isIndex } = body
+        if (!symbol || !nameHe) return json({ error: 'missing symbol/name' }, 400, origin)
+        if (!env.SERVICE_ACCOUNT || (!env.GEMINI_API_KEY && !env.OPENAI_API_KEY)) return json({ skipped: true }, 200, origin)
+        ctx.waitUntil(primeSymbol(env, symbol, nameHe, !!isIndex).catch((e) => console.log('prime error:', String(e))))
+        return json({ ok: true }, 200, origin)
+      }
 
       // Action: resolve a (possibly Hebrew) instrument name to a real Yahoo ticker, so a stock
       // added by any user gets full price/chart/reviews — never a dead 'other' entry.

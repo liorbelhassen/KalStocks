@@ -16,6 +16,9 @@ export default function StockTile({ stock, onRemove, onQuantity, onPrice, insigh
   const cur = stock.currency || '₪'
   const hasPrice = stock.priceIls != null
   const view = tileView(stock, tab)
+  // Shrink long names so they fit (and let them wrap to a 2nd line instead of being clipped).
+  const nameLen = (stock.nameHe || '').length
+  const nameSize = nameLen > 20 ? 20 : nameLen > 15 ? 25 : nameLen > 10 ? 31 : 38
 
   const hasChange = view.pct != null
   const up = (view.pct ?? 0) >= 0
@@ -30,7 +33,7 @@ export default function StockTile({ stock, onRemove, onQuantity, onPrice, insigh
       <div style={{ width: 300, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
         <Badge badge={stock.badge} />
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 38, fontWeight: 700, lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stock.nameHe}</div>
+          <div style={{ fontSize: nameSize, fontWeight: 700, lineHeight: 1.12, overflowWrap: 'anywhere', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{stock.nameHe}</div>
           <div style={{ fontSize: 13, color: 'var(--text-dim)', direction: 'ltr', textAlign: 'right', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stock.subtitle}</div>
         </div>
       </div>
@@ -81,7 +84,7 @@ export default function StockTile({ stock, onRemove, onQuantity, onPrice, insigh
           </>
         ) : (
           <span style={{ fontSize: 12.5, color: 'var(--text-dim)', fontStyle: 'italic' }}>
-            {tab === 'today' ? 'ממתין לנתונים…' : 'תובנת התקופה תתעדכן בסקירת הבוקר.'}
+            מפיק תובנה…
           </span>
         )}
       </div>

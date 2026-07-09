@@ -61,6 +61,17 @@ export async function resolveSymbol(name) {
   }
 }
 
+// Fire-and-forget: ask the Worker to generate today/week/month reviews for a just-added instrument,
+// so they appear within seconds. The dashboard's Firestore subscriptions pick them up when ready.
+export function primeInstrument(symbol, nameHe, isIndex) {
+  if (!VISION_URL || !symbol || !nameHe) return
+  fetch(VISION_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'prime', symbol, nameHe, isIndex: !!isIndex }),
+  }).catch(() => {})
+}
+
 export async function analyzeScreenshot(file) {
   if (!VISION_URL) throw new Error('שירות הזיהוי טרם הוגדר (VITE_VISION_URL).')
   const imageBase64 = await fileToBase64(file)
