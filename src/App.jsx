@@ -177,6 +177,7 @@ export default function App() {
     }
   }
 
+  const todayIL = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date())
   const stocks = watchlist.map((w) => {
     const priceSym = w.priceSymbol || w.symbol
     const snap = snapshots[priceSym] || liveQuotes[priceSym]
@@ -194,14 +195,19 @@ export default function App() {
     const dataInsight = () => {
       const c = snap?.changePct
       if (c == null) return null
-      const noun = snap.isIndex ? 'המדד' : 'המניה'
-      const desc = Math.abs(c) < 0.3 ? 'נסחר סביב רמת הפתיחה, ללא שינוי מהותי היום' : `${c >= 0 ? 'עלה' : 'ירד'} ${Math.abs(c).toFixed(1)}% היום, במגמה ${c >= 0 ? 'חיובית' : 'שלילית'}`
-      return { text: `${noun} ${desc}.`, confidence: null, sources: [], at: '', kind: 'data' }
+      const isIdx = snap.isIndex
+      const up = c >= 0
+      const verb = isIdx ? (up ? 'עלה' : 'ירד') : up ? 'עלתה' : 'ירדה'
+      const desc = Math.abs(c) < 0.3 ? `${isIdx ? 'נסחר' : 'נסחרת'} סביב רמת הפתיחה, ללא שינוי מהותי היום` : `${verb} ${Math.abs(c).toFixed(1)}% היום, במגמה ${up ? 'חיובית' : 'שלילית'}`
+      return { text: `${isIdx ? 'המדד' : 'המניה'} ${desc}.`, confidence: null, sources: [], at: '', kind: 'data' }
     }
-    const insight = exp
-      ? { text: exp.explanation, confidence: exp.confidence, sources: exp.sources || [], at: hhmm(exp.at), kind: 'event' }
-      : brief
-        ? { text: brief.assessment, confidence: brief.confidence, sources: brief.sources || [], at: hhmm(brief.at), kind: 'brief', session: brief.session }
+    // The brief is the authoritative, fresh, direction-aware insight (morning/midday/volatility trigger).
+    // A legacy event explanation only fills in when there's no brief today; never let a stale one win.
+    const expFresh = exp && exp.date === todayIL
+    const insight = brief
+      ? { text: brief.assessment, confidence: brief.confidence, sources: brief.sources || [], at: hhmm(brief.at), kind: 'brief', session: brief.session }
+      : expFresh
+        ? { text: exp.explanation, confidence: exp.confidence, sources: exp.sources || [], at: hhmm(exp.at), kind: 'event' }
         : dataInsight()
     return {
       key: w.symbol,
