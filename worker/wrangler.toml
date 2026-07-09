@@ -1,11 +1,16 @@
 name = "kalstocks-vision"
 main = "worker.js"
 compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
 
-# Reliable 5-min price poll (fires on time, unlike GitHub Actions cron).
+# Reliable crons (fire on time, unlike GitHub Actions):
+#  - every 5 min: price poll
+#  - 06:00 & 07:00 UTC: morning brief (the job runs only at the 09:00 Israel slot — handles DST)
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/5 * * * *", "0 6 * * 0-4", "0 7 * * 0-4"]
 
 # Deploy:  cd worker && wrangler deploy
-# Secrets: wrangler secret put GEMINI_API_KEY                 (Gemini key — for vision)
-#          wrangler secret put SERVICE_ACCOUNT < ../serviceAccount.json   (for the cron poller)
+# Secrets: wrangler secret put GEMINI_API_KEY
+#          wrangler secret put SERVICE_ACCOUNT < ../serviceAccount.json
+#          wrangler secret put RESEND_API_KEY
+#          wrangler secret put DIGEST_TO

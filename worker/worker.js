@@ -4,6 +4,8 @@
 //            without waiting for the scheduled poller — no Gemini involved).
 import { fetchSnapshot, fetchSnapshots } from '../lib/yahoo.js'
 import { getAccessToken, listDocs, patchDoc } from './firestore.js'
+import { assessOpen, buildMorningHtml } from '../lib/morning.js'
+import { explainMove } from '../lib/explain.js'
 
 const ALLOWED = ['https://kalstocks1.web.app', 'http://localhost:5175', 'http://localhost:5173']
 
@@ -45,6 +47,92 @@ async function pollPrices(env) {
       /* skip one symbol on failure */
     }
   }
+}
+
+const ilDateISO = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date())
+const ilDateHe = () =>
+  new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date())
+
+// Morning brief — reliable 09:00 Israel (Cloudflare cron fires on time). Sends the email +
+// writes today's briefs + week/month period data & explanations. Reuses the shared libs.
+async function morningJob(env) {
+  if (!env.SERVICE_ACCOUNT || !env.GEMINI_API_KEY) return
+  if (Math.floor(minutesInZone('Asia/Jerusalem').min / 60) !== 9) return // only the 09:xx slot (DST-safe)
+
+  const sa = JSON.parse(env.SERVICE_ACCOUNT)
+  const token = await getAccessToken(sa)
+  const pid = sa.project_id
+  const dateStr = ilDateISO()
+
+  const items = await listDocs(token, pid, 'watchlist')
+  const snaps = {}
+  ;(await listDocs(token, pid, 'snapshots')).forEach((s) => {
+    if (s.symbol) snaps[s.symbol] = s
+  })
+
+  const groups = new Map()
+  for (const w of items) {
+    if (w.kind === 'other') continue
+    const ps = w.priceSymbol || w.symbol
+    if (!ps) continue
+    if (!groups.has(ps)) groups.set(ps, { priceSymbol: ps, repName: w.nameHe, isIndex: snaps[ps]?.isIndex })
+    if (snaps[ps]?.isIndex) groups.get(ps).repName = w.nameHe
+  }
+
+  const assessments = {}
+  for (const g of groups.values()) {
+    try {
+      assessments[g.priceSymbol] = await assessOpen({ nameHe: g.repName, symbol: g.priceSymbol, date: dateStr, isIndex: !!g.isIndex, session: 'morning' }, env.GEMINI_API_KEY)
+    } catch {
+      /* skip */
+    }
+  }
+  for (const [ps, a] of Object.entries(assessments)) {
+    await patchDoc(token, pid, `briefs/${encodeURIComponent(`${ps}__${dateStr}`)}`, {
+      priceSymbol: ps, date: dateStr, session: 'morning', assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], at: Date.now(),
+    })
+  }
+
+  const emailItems = items
+    .filter((w) => w.kind !== 'other')
+    .map((w) => {
+      const ps = w.priceSymbol || w.symbol
+      const a = assessments[ps] || {}
+      return { symbol: w.symbol, nameHe: w.nameHe, kind: w.kind, isIndex: snaps[ps]?.isIndex, priceIls: snaps[ps]?.priceIls, assessment: a.assessment || 'לא נמצאה הערכה.', sentiment: a.sentiment, confidence: a.confidence, sources: a.sources }
+    })
+  const html = buildMorningHtml({ dateStr: ilDateHe(), items: emailItems, session: 'morning' })
+  if (env.RESEND_API_KEY && env.DIGEST_TO) {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: env.DIGEST_FROM || 'KalStocks <onboarding@resend.dev>', to: env.DIGEST_TO, subject: `☀️ סקירת בוקר KalStocks · ${dateStr}`, html }),
+    })
+  }
+
+  // Week/month period data + explanations.
+  const pchg = (snap) => {
+    const v = (snap.series || []).map((p) => p.v).filter((x) => x != null)
+    return v.length > 1 ? ((v[v.length - 1] - v[0]) / v[0]) * 100 : 0
+  }
+  for (const ps of groups.keys()) {
+    try {
+      const repName = groups.get(ps).repName || ps
+      const wk = await fetchSnapshot(ps, { range: '5d', interval: '30m' })
+      const mo = await fetchSnapshot(ps, { range: '1mo', interval: '1d' })
+      const wc = pchg(wk)
+      const mc = pchg(mo)
+      const we = await explainMove({ nameHe: repName, symbol: ps, changePct: wc, direction: wc >= 0 ? 'up' : 'down', date: dateStr, period: 'week' }, env.GEMINI_API_KEY).catch(() => null)
+      const me = await explainMove({ nameHe: repName, symbol: ps, changePct: mc, direction: mc >= 0 ? 'up' : 'down', date: dateStr, period: 'month' }, env.GEMINI_API_KEY).catch(() => null)
+      await patchDoc(token, pid, `periods/${encodeURIComponent(ps)}`, {
+        symbol: ps, updatedAt: Date.now(),
+        week: { changePct: Math.round(wc * 100) / 100, series: wk.series || [], explanation: we?.explanation || null, confidence: we?.confidence || null, sources: we?.sources || [] },
+        month: { changePct: Math.round(mc * 100) / 100, series: mo.series || [], explanation: me?.explanation || null, confidence: me?.confidence || null, sources: me?.sources || [] },
+      })
+    } catch {
+      /* skip */
+    }
+  }
+  console.log('morning job done for', dateStr)
 }
 
 function cors(origin) {
@@ -144,8 +232,12 @@ export default {
     }
   },
 
-  // Cloudflare cron trigger — reliable 5-min price refresh.
+  // Cloudflare cron triggers (fire on time). */5 → price poll; 06:00/07:00 UTC → morning brief.
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(pollPrices(env).catch((e) => console.log('cron poll error:', String(e))))
+    if (event.cron === '*/5 * * * *') {
+      ctx.waitUntil(pollPrices(env).catch((e) => console.log('cron poll error:', String(e))))
+    } else {
+      ctx.waitUntil(morningJob(env).catch((e) => console.log('cron morning error:', String(e))))
+    }
   },
 }

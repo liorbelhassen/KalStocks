@@ -3,9 +3,7 @@ name: morning-brief
 # Dashboard AI insight refresh twice a day (Israel): ~09:00 morning brief (+email) and
 # ~13:00 midday update (dashboard only). 09:00 IDT = 06:00 UTC, 13:00 IDT = 10:00 UTC.
 on:
-  schedule:
-    # off-:00 minute — GitHub delays on-the-hour crons more. Still best-effort.
-    - cron: '7 6,10 * * 0-4'
+  # Scheduling moved to the Cloudflare Worker cron (reliable 09:00). Kept for manual runs / backup.
   workflow_dispatch: {}
 
 jobs:
