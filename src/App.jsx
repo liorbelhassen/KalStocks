@@ -205,9 +205,9 @@ export default function App() {
     // A legacy event explanation only fills in when there's no brief today; never let a stale one win.
     const expFresh = exp && exp.date === todayIL
     const insight = brief
-      ? { text: brief.assessment, confidence: brief.confidence, sources: brief.sources || [], at: hhmm(brief.at), kind: 'brief', session: brief.session }
+      ? { text: brief.assessment, confidence: brief.confidence, sources: brief.sources || [], at: hhmm(brief.at), ts: brief.at, kind: 'brief', session: brief.session }
       : expFresh
-        ? { text: exp.explanation, confidence: exp.confidence, sources: exp.sources || [], at: hhmm(exp.at), kind: 'event' }
+        ? { text: exp.explanation, confidence: exp.confidence, sources: exp.sources || [], at: hhmm(exp.at), ts: exp.at, kind: 'event' }
         : dataInsight()
     return {
       key: w.symbol,

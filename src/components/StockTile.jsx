@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import PriceChart from './PriceChart'
-import { MiniField, tileView, fmt, fmt0 } from './tileBits'
+import { MiniField, tileView, fmt, fmt0, fmtTs } from './tileBits'
 
 function Badge({ badge }) {
   if (!badge) return null
@@ -73,7 +73,11 @@ export default function StockTile({ stock, onRemove, onQuantity, onPrice, insigh
         </div>
         {view.insight ? (
           <>
-            {view.insight.label && <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-dim)' }}>{view.insight.label}</div>}
+            {(view.insight.label || view.ts) && (
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-dim)' }}>
+                {view.insight.label}{view.ts ? `${view.insight.label ? ' · ' : ''}🕐 ${fmtTs(view.ts)}` : ''}
+              </div>
+            )}
             <div style={{ fontSize: insightFontSize, lineHeight: 1.5 }}>{view.insight.text}</div>
             {view.insight.confidence && (
               <div style={{ fontSize: 10.5, color: 'var(--text-dim)', marginTop: 1 }}>

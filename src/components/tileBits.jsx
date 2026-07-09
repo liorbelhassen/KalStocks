@@ -39,12 +39,19 @@ export function todayLabel(explanation) {
   return ''
 }
 
-// Resolve the active period's { pct, series, insight } for a stock and the selected tab.
+// "when was this insight generated" — a short date+time stamp for the insight header.
+export function fmtTs(ms) {
+  if (!ms) return ''
+  return new Date(ms).toLocaleString('he-IL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+// Resolve the active period's { pct, series, insight, ts } for a stock and the selected tab.
 export function tileView(stock, tab) {
   const wk = stock.periods?.week
   const mo = stock.periods?.month
-  if (tab === 'week') return { pct: wk?.changePct, series: wk?.series || [], insight: periodInsight(wk, 'week') }
-  if (tab === 'month') return { pct: mo?.changePct, series: mo?.series || [], insight: periodInsight(mo, 'month') }
+  const periodsTs = stock.periods?.updatedAt
+  if (tab === 'week') return { pct: wk?.changePct, series: wk?.series || [], insight: periodInsight(wk, 'week'), ts: periodsTs }
+  if (tab === 'month') return { pct: mo?.changePct, series: mo?.series || [], insight: periodInsight(mo, 'month'), ts: periodsTs }
   const todayInsight = stock.explanation ? { ...stock.explanation, label: todayLabel(stock.explanation) } : null
-  return { pct: stock.changePct, series: stock.series || [], insight: todayInsight }
+  return { pct: stock.changePct, series: stock.series || [], insight: todayInsight, ts: stock.explanation?.ts }
 }
