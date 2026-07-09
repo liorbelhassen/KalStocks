@@ -38,6 +38,7 @@ async function main() {
   // Assess once per unique priceSymbol (ETFs share the TA-35 proxy).
   const groups = new Map()
   for (const w of items) {
+    if (w.kind === 'other') continue // manual-price stocks have no AI/price source
     const ps = w.priceSymbol || w.symbol
     if (!groups.has(ps)) groups.set(ps, { priceSymbol: ps, repName: w.nameHe, isIndex: snaps[ps]?.isIndex })
     if (snaps[ps]?.isIndex) groups.get(ps).repName = w.nameHe // prefer index name if present

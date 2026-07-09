@@ -4,7 +4,8 @@ name: morning-brief
 # ~13:00 midday update (dashboard only). 09:00 IDT = 06:00 UTC, 13:00 IDT = 10:00 UTC.
 on:
   schedule:
-    - cron: '0 6,10 * * 0-4'
+    # off-:00 minute — GitHub delays on-the-hour crons more. Still best-effort.
+    - cron: '7 6,10 * * 0-4'
   workflow_dispatch: {}
 
 jobs:
