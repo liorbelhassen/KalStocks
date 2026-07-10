@@ -20,7 +20,7 @@ function minutesInZone(tz) {
 }
 function marketOpen() {
   const il = minutesInZone('Asia/Jerusalem')
-  const taseOpen = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu'].includes(il.wd) && il.min >= 570 && il.min <= 1040
+  const taseOpen = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(il.wd) && il.min >= 570 && il.min <= 1040 // TASE trades Mon–Fri
   const ny = minutesInZone('America/New_York')
   const usOpen = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(ny.wd) && ny.min >= 570 && ny.min < 960
   return taseOpen || usOpen

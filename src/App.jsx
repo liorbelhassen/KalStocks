@@ -258,7 +258,7 @@ export default function App() {
   }
   const il = zparts('Asia/Jerusalem')
   const ny = zparts('America/New_York')
-  const taseOpen = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu'].includes(il.wd) && il.m >= 570 && il.m <= 1035
+  const taseOpen = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(il.wd) && il.m >= 570 && il.m <= 1035 // TASE trades Mon–Fri
   const usOpen = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(ny.wd) && ny.m >= 570 && ny.m < 960
   const marketOpen = market === 'US' ? usOpen : taseOpen
 

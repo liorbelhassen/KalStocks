@@ -20,7 +20,7 @@ const TZ = 'Asia/Jerusalem'
 function isMarketOpen() {
   const il = DateTime.now().setZone(TZ)
   const ilMin = il.hour * 60 + il.minute
-  const taseOpen = (il.weekday === 7 || (il.weekday >= 1 && il.weekday <= 4)) && ilMin >= 570 && ilMin <= 1040
+  const taseOpen = il.weekday >= 1 && il.weekday <= 5 && ilMin >= 570 && ilMin <= 1040 // TASE trades Mon–Fri (Luxon: Mon=1..Fri=5)
   const ny = DateTime.now().setZone('America/New_York')
   const nyMin = ny.hour * 60 + ny.minute
   const usOpen = ny.weekday >= 1 && ny.weekday <= 5 && nyMin >= 570 && nyMin < 960
