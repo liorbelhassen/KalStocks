@@ -251,6 +251,17 @@ export default function App() {
       })
     : '—'
 
+  // Live market-open status so a weekend/after-hours "stale" price never looks like a failure.
+  const zparts = (tz) => {
+    const p = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date())
+    return { wd: p.find((x) => x.type === 'weekday').value, m: +p.find((x) => x.type === 'hour').value * 60 + +p.find((x) => x.type === 'minute').value }
+  }
+  const il = zparts('Asia/Jerusalem')
+  const ny = zparts('America/New_York')
+  const taseOpen = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu'].includes(il.wd) && il.m >= 570 && il.m <= 1035
+  const usOpen = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(ny.wd) && ny.m >= 570 && ny.m < 960
+  const marketOpen = market === 'US' ? usOpen : taseOpen
+
   // Group rows by sector (banks, indices, ETFs…) in a fixed display order.
   const f = filter.trim().toLowerCase()
   const shownStocks = f
@@ -286,7 +297,10 @@ export default function App() {
   return (
     <div style={{ maxWidth: '100%', margin: '0 auto', padding: '10px 28px 60px' }}>
       <div style={{ textAlign: 'right', color: 'var(--text-dim)', fontSize: 12, marginBottom: 6 }}>
-        עודכן לאחרונה: {lastUpdatedLabel} · המחירים מתרעננים אוטומטית כל ~5 דקות בשעות המסחר.
+        <span style={{ display: 'inline-block', padding: '2px 10px', borderRadius: 999, fontWeight: 700, marginLeft: 8, background: marketOpen ? 'var(--up-bg)' : 'var(--panel)', color: marketOpen ? 'var(--up)' : 'var(--text-dim)', border: '1px solid var(--border)' }}>
+          {marketOpen ? `🟢 מסחר פעיל (${market === 'US' ? 'וול סטריט' : 'ת"א'})` : `🔴 השוק סגור — מחיר נעילה (${market === 'US' ? 'וול סטריט' : 'ת"א'})`}
+        </span>
+        עודכן לאחרונה: {lastUpdatedLabel} · מתרענן אוטומטית כל ~5 דק' בשעות המסחר.
       </div>
       <header style={{ marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
