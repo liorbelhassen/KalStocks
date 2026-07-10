@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import PriceChart from './PriceChart'
 import { MiniField, tileView, fmt, fmt0, fmtTs } from './tileBits'
 
@@ -13,8 +13,10 @@ const TABS = [['today', 'היום'], ['week', 'השבוע'], ['month', 'החוד
 
 export default function StockTile({ stock, onRemove, onQuantity, onPrice, insightFontSize = 13, syncTab = 'today', syncKey = 0 }) {
   const [tab, setTab] = useState('today')
-  // Page-level "align all": adopt the broadcast period on each align click (still changeable locally).
-  useEffect(() => { setTab(syncTab) }, [syncKey, syncTab])
+  // Page-level "align all": on each align click (syncKey bump) adopt the broadcast period during
+  // render (React's prop-driven state-reset pattern) — still changeable locally afterward.
+  const [seenSync, setSeenSync] = useState(syncKey)
+  if (syncKey !== seenSync) { setSeenSync(syncKey); setTab(syncTab) }
   const cur = stock.currency || '₪'
   const hasPrice = stock.priceIls != null
   const view = tileView(stock, tab)

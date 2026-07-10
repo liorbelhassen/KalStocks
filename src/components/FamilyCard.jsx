@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import PriceChart from './PriceChart'
 import { MiniField, tileView, fmt0, fmtTs } from './tileBits'
 
@@ -9,8 +9,10 @@ const TABS = [['today', 'היום'], ['week', 'השבוע'], ['month', 'החוד
 // holding value and controls. `rep` is the representative member for the shared data.
 export default function FamilyCard({ title, rep, members, insightFontSize = 14, onRemove, onQuantity, onPrice, syncTab = 'today', syncKey = 0 }) {
   const [tab, setTab] = useState('today')
-  // Page-level "align all": adopt the broadcast period on each align click (still changeable locally).
-  useEffect(() => { setTab(syncTab) }, [syncKey, syncTab])
+  // Page-level "align all": on each align click (syncKey bump) adopt the broadcast period during
+  // render (React's prop-driven state-reset pattern) — still changeable locally afterward.
+  const [seenSync, setSeenSync] = useState(syncKey)
+  if (syncKey !== seenSync) { setSeenSync(syncKey); setTab(syncTab) }
   const view = tileView(rep, tab)
   const cur = rep.currency || '₪'
   const hasChange = view.pct != null
