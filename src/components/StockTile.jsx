@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import PriceChart from './PriceChart'
 import { MiniField, tileView, fmt, fmt0, fmtTs } from './tileBits'
 
@@ -11,8 +11,10 @@ function Badge({ badge }) {
 
 const TABS = [['today', 'היום'], ['week', 'השבוע'], ['month', 'החודש']]
 
-export default function StockTile({ stock, onRemove, onQuantity, onPrice, insightFontSize = 13 }) {
+export default function StockTile({ stock, onRemove, onQuantity, onPrice, insightFontSize = 13, syncTab = 'today', syncKey = 0 }) {
   const [tab, setTab] = useState('today')
+  // Page-level "align all": adopt the broadcast period on each align click (still changeable locally).
+  useEffect(() => { setTab(syncTab) }, [syncKey, syncTab])
   const cur = stock.currency || '₪'
   const hasPrice = stock.priceIls != null
   const view = tileView(stock, tab)

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import PriceChart from './PriceChart'
 import { MiniField, tileView, fmt0, fmtTs } from './tileBits'
 
@@ -7,8 +7,10 @@ const TABS = [['today', 'היום'], ['week', 'השבוע'], ['month', 'החוד
 // A unified card for instruments that track the same underlying (e.g. the TA-35 index + its ETFs).
 // The review + chart + % are shared and shown once; each member gets a compact row with its own
 // holding value and controls. `rep` is the representative member for the shared data.
-export default function FamilyCard({ title, rep, members, insightFontSize = 14, onRemove, onQuantity, onPrice }) {
+export default function FamilyCard({ title, rep, members, insightFontSize = 14, onRemove, onQuantity, onPrice, syncTab = 'today', syncKey = 0 }) {
   const [tab, setTab] = useState('today')
+  // Page-level "align all": adopt the broadcast period on each align click (still changeable locally).
+  useEffect(() => { setTab(syncTab) }, [syncKey, syncTab])
   const view = tileView(rep, tab)
   const cur = rep.currency || '₪'
   const hasChange = view.pct != null

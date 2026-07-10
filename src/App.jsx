@@ -31,6 +31,9 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [market, setMarket] = useState('IL') // active tab: 'IL' | 'US'
   const [filter, setFilter] = useState('') // filter the watched list by name/symbol
+  const [syncTab, setSyncTab] = useState('today') // page-level "align all tiles to this period"
+  const [syncKey, setSyncKey] = useState(0) // bumps on each align click to re-broadcast
+  const alignAll = (period) => { setSyncTab(period); setSyncKey((k) => k + 1) }
   const [insightSize, setInsightSize] = useState(() => Number(localStorage.getItem('kal_insightSize')) || 14)
   const changeInsightSize = (n) => { setInsightSize(n); localStorage.setItem('kal_insightSize', String(n)) }
   const [importing, setImporting] = useState(false)
@@ -362,6 +365,25 @@ export default function App() {
         ))}
       </div>
 
+      {/* Page-level period sync — one click aligns every tile on this page to the chosen period. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-dim)', fontWeight: 700 }}>⇄ יישר את כל הניירות:</span>
+        {[['today', 'היום'], ['week', 'שבועי'], ['month', 'חודשי']].map(([p, lbl]) => (
+          <button
+            key={p}
+            onClick={() => alignAll(p)}
+            style={{
+              background: syncTab === p ? 'var(--accent)' : 'var(--panel)',
+              color: syncTab === p ? '#fff' : 'var(--text)',
+              border: `2px solid ${syncTab === p ? 'var(--accent)' : 'var(--border)'}`,
+              borderRadius: 12, padding: '10px 28px', fontSize: 16, fontWeight: 800, cursor: 'pointer',
+            }}
+          >
+            {lbl}
+          </button>
+        ))}
+      </div>
+
       {settingsOpen && (
         <Settings
           watchlist={watchlist}
@@ -506,6 +528,8 @@ export default function App() {
               rep={fam.rep}
               members={fam.members}
               insightFontSize={insightSize}
+              syncTab={syncTab}
+              syncKey={syncKey}
               onRemove={(sym) => removeFromWatchlist(user.uid, sym)}
               onQuantity={(sym, qty) => updateQuantity(user.uid, sym, qty).catch((e) => setError(e.message))}
               onPrice={(sym, p) => updatePrice(user.uid, sym, p).catch((e) => setError(e.message))}
@@ -522,6 +546,8 @@ export default function App() {
                     key={s.key}
                     stock={s}
                     insightFontSize={insightSize}
+                    syncTab={syncTab}
+                    syncKey={syncKey}
                     onRemove={() => removeFromWatchlist(user.uid, s.symbol)}
                     onQuantity={(qty) => updateQuantity(user.uid, s.symbol, qty).catch((e) => setError(e.message))}
                     onPrice={(p) => updatePrice(user.uid, s.symbol, p).catch((e) => setError(e.message))}
