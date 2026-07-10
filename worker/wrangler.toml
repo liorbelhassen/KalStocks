@@ -8,7 +8,7 @@ compatibility_flags = ["nodejs_compat"]
 #  - 06:00/07:00 UTC → 09:00 Israel morning brief (+email); 10:00/11:00 UTC → 13:00 Israel midday
 #    refresh. The job gates by Israel hour (9 or 13), so the extra UTC slot covers DST.
 [triggers]
-crons = ["*/5 * * * *", "0 6 * * SUN-THU", "0 7 * * SUN-THU", "0 10 * * SUN-THU", "0 11 * * SUN-THU"]
+crons = ["*/5 * * * *", "0 6 * * SUN-FRI", "0 7 * * SUN-FRI", "0 10 * * SUN-FRI", "0 11 * * SUN-FRI"]
 
 # Deploy:  cd worker && wrangler deploy
 # Secrets: wrangler secret put GEMINI_API_KEY
