@@ -58,17 +58,37 @@ const decode = (v) => {
   if ('integerValue' in v) return Number(v.integerValue)
   if ('doubleValue' in v) return v.doubleValue
   if ('booleanValue' in v) return v.booleanValue
+  if ('arrayValue' in v) return (v.arrayValue.values || []).map(decode)
+  if ('mapValue' in v) return decodeFields(v.mapValue.fields)
   return null
 }
+const decodeFields = (fields) => {
+  const o = {}
+  for (const k in fields || {}) o[k] = decode(fields[k])
+  return o
+}
 
+// Lists a whole collection, following `nextPageToken` (a single page silently truncates at
+// `pageSize` — e.g. today's briefs stop being found once the collection has >300 docs).
 export async function listDocs(token, pid, coll) {
-  const res = await fetch(`${base(pid)}/${coll}?pageSize=300`, { headers: { Authorization: `Bearer ${token}` } })
-  const j = await res.json()
-  return (j.documents || []).map((d) => {
-    const o = {}
-    for (const k in d.fields || {}) o[k] = decode(d.fields[k])
-    return o
-  })
+  const out = []
+  let pageToken = ''
+  do {
+    const res = await fetch(`${base(pid)}/${coll}?pageSize=300${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`, { headers: { Authorization: `Bearer ${token}` } })
+    if (!res.ok) throw new Error(`list ${coll}: ${res.status} ${(await res.text()).slice(0, 150)}`)
+    const j = await res.json()
+    for (const d of j.documents || []) out.push({ __id: decodeURIComponent(d.name.split('/').pop()), ...decodeFields(d.fields) })
+    pageToken = j.nextPageToken || ''
+  } while (pageToken)
+  return out
+}
+
+/** Single document by path (`coll/docId`), or null when it does not exist. */
+export async function getDoc(token, pid, path) {
+  const res = await fetch(`${base(pid)}/${path}`, { headers: { Authorization: `Bearer ${token}` } })
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error(`get ${path}: ${res.status} ${(await res.text()).slice(0, 150)}`)
+  return decodeFields((await res.json()).fields)
 }
 
 function toValue(v) {

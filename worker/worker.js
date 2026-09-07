@@ -3,13 +3,15 @@
 //  - quote:  fetch a live Yahoo snapshot for a symbol (so a manually-added stock loads instantly,
 //            without waiting for the scheduled poller — no Gemini involved).
 import { fetchSnapshot, fetchSnapshots } from '../lib/yahoo.js'
-import { getAccessToken, listDocs, patchDoc } from './firestore.js'
+import { getAccessToken, getDoc, listDocs, patchDoc } from './firestore.js'
 import { assessOpen, buildMorningHtml } from '../lib/morning.js'
 import { explainMove } from '../lib/explain.js'
 import { visionExtract } from '../lib/vision.js'
 import { askWithSearch } from '../lib/llm.js'
 import { classify } from '../lib/volatility.js'
-import { telegramContext } from '../lib/telegram.js'
+import { fetchHeadlines, buildNewsContext } from '../lib/telegram.js'
+import { buildPeriodsDoc, marketOf } from '../lib/periods.js'
+import { logEvent } from '../lib/validate.js'
 
 const ALLOWED = ['https://kalstocks1.web.app', 'http://localhost:5175', 'http://localhost:5173']
 
@@ -49,10 +51,11 @@ async function pollPrices(env) {
         ...snap,
         updatedAt: Date.now(),
       })
-    } catch {
-      /* skip one symbol on failure */
+    } catch (e) {
+      logEvent('error', { stage: 'store-snapshot', symbol: snap.symbol, error: String(e) })
     }
   }
+  for (const snap of snaps) if (snap.error) logEvent('warn', { stage: 'price', symbol: snap.symbol, error: snap.error })
 
   // Volatility trigger: when a stock crosses its per-stock threshold, refresh its insight with a
   // fresh, direction-aware explanation of the move. Deduped by 'band' so the same level isn't
@@ -65,7 +68,7 @@ async function pollPrices(env) {
   const session = Math.floor(minutesInZone('Asia/Jerusalem').min / 60) < 12 ? 'morning' : 'midday'
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
   const done = new Set()
-  let news = null // fetched lazily on the first significant mover
+  let headlines = null // fetched lazily on the first significant mover
   for (const w of wl) {
     if (w.kind === 'other') continue
     const ps = w.priceSymbol || w.symbol
@@ -76,15 +79,17 @@ async function pollPrices(env) {
     if (!c.significant || (priorBand[ps] || 0) >= c.band) continue // not significant, or level already explained
     done.add(ps)
     try {
-      if (news === null) news = await telegramContext() // fetch once, only if there's a mover to explain
+      if (headlines === null) headlines = await fetchHeadlines() // fetch once, only if there's a mover to explain
       const isIndex = !!snap.isIndex
-      const a = await assessOpen({ nameHe: w.nameHe, symbol: isIndex ? '' : ps, date: dateStr, isIndex, session, changePct: snap.changePct, newsContext: news }, keys)
+      const market = marketOf(ps)
+      const news = buildNewsContext(headlines, { market, nameHe: w.nameHe, symbol: ps })
+      const a = await assessOpen({ nameHe: w.nameHe, symbol: isIndex ? '' : ps, market, date: dateStr, isIndex, session, changePct: snap.changePct, newsContext: news }, keys)
       await patchDoc(token, sa.project_id, `briefs/${encodeURIComponent(`${ps}__${dateStr}`)}`, {
         priceSymbol: ps, date: dateStr, session, band: c.band, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], at: Date.now(),
       })
       await sleep(2000)
-    } catch {
-      /* skip one symbol */
+    } catch (e) {
+      logEvent('warn', { stage: e.stage || 'brief', symbol: ps, period: 'day', changePct: snap.changePct, error: e.message })
     }
   }
 }
@@ -103,7 +108,7 @@ async function morningJob(env) {
 
   // Gemini (free) first, OpenAI (paid) fallback — keeps assessments reliable past Gemini's quota.
   const keys = { geminiKey: env.GEMINI_API_KEY, geminiModel: env.GEMINI_MODEL, openaiKey: env.OPENAI_API_KEY, openaiModel: env.OPENAI_MODEL }
-  const news = await telegramContext() // real-time headlines to ground the insights (anti-hallucination)
+  const headlines = await fetchHeadlines() // real-time headlines to ground the insights (anti-hallucination)
 
   const sa = JSON.parse(env.SERVICE_ACCOUNT)
   const token = await getAccessToken(sa)
@@ -129,16 +134,20 @@ async function morningJob(env) {
     if (!ps) continue
     const isOther = w.kind === 'other'
     if (!groups.has(ps)) groups.set(ps, { priceSymbol: ps, repName: w.nameHe, isIndex: snaps[ps]?.isIndex, isOther, symbol: isOther ? '' : ps })
-    if (snaps[ps]?.isIndex) groups.get(ps).repName = w.nameHe
+    // Several ETFs share one price symbol (e.g. TA35.TA). Describe the group by the instrument that
+    // IS the price symbol (the index), never by whichever ETF happened to be listed last.
+    if (w.symbol === ps) groups.get(ps).repName = w.nameHe
   }
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
   const assessments = {}
   for (const g of groups.values()) {
     try {
-      assessments[g.priceSymbol] = await assessOpen({ nameHe: g.repName, symbol: g.symbol, date: dateStr, isIndex: !!g.isIndex, session, changePct: session === 'midday' ? snaps[g.priceSymbol]?.changePct : null, newsContext: news }, keys)
-    } catch {
-      /* skip */
+      const market = marketOf(g.priceSymbol)
+      const news = buildNewsContext(headlines, { market, nameHe: g.repName, symbol: g.priceSymbol })
+      assessments[g.priceSymbol] = await assessOpen({ nameHe: g.repName, symbol: g.symbol, market, date: dateStr, isIndex: !!g.isIndex, session, changePct: session === 'midday' ? snaps[g.priceSymbol]?.changePct : null, newsContext: news }, keys)
+    } catch (e) {
+      logEvent('warn', { stage: e.stage || 'brief', symbol: g.priceSymbol, period: 'day', session, error: e.message })
     }
     await sleep(4500) // pace to stay under Gemini's ~20 requests/minute free limit
   }
@@ -148,8 +157,13 @@ async function morningJob(env) {
     })
   }
 
-  // Midday only refreshes the dashboard insights (session-aware) — no email, no period recompute.
-  if (session !== 'morning') { console.log('midday refresh done for', dateStr); return }
+  // Midday refreshes the dashboard insights and the week/month numbers (explanations are reused via
+  // their period key, so no extra LLM calls) — no email.
+  if (session !== 'morning') {
+    await refreshPeriods(token, pid, groups, keys, sleep)
+    console.log('midday refresh done for', dateStr)
+    return
+  }
 
   const emailItems = emailSource
     .filter((w) => w.kind !== 'other')
@@ -167,33 +181,24 @@ async function morningJob(env) {
     })
   }
 
-  // Week/month period data + explanations.
-  const pchg = (snap) => {
-    const v = (snap.series || []).map((p) => p.v).filter((x) => x != null)
-    return v.length > 1 ? ((v[v.length - 1] - v[0]) / v[0]) * 100 : 0
-  }
+  await refreshPeriods(token, pid, groups, keys, sleep)
+  console.log('morning job done for', dateStr)
+}
+
+// Week/month period data + explanations for every price symbol. One symbol's failure never skips
+// the rest; each failure is logged with {stage, symbol, period}. Explanations are keyed by the exact
+// window (symbol + period + start/end dates), so a stale text is never re-served for a new window.
+async function refreshPeriods(token, pid, groups, keys, sleep) {
   for (const [ps, g] of groups.entries()) {
     if (g.isOther) continue // no Yahoo price series for manual-price stocks
     try {
-      const repName = g.repName || ps
-      const wk = await fetchSnapshot(ps, { range: '5d', interval: '30m' })
-      const mo = await fetchSnapshot(ps, { range: '1mo', interval: '1d' })
-      const wc = pchg(wk)
-      const mc = pchg(mo)
-      const we = await explainMove({ nameHe: repName, symbol: ps, changePct: wc, direction: wc >= 0 ? 'up' : 'down', date: dateStr, period: 'week', newsContext: news }, keys).catch(() => null)
-      await sleep(4500)
-      const me = await explainMove({ nameHe: repName, symbol: ps, changePct: mc, direction: mc >= 0 ? 'up' : 'down', date: dateStr, period: 'month', newsContext: news }, keys).catch(() => null)
-      await sleep(4500)
-      await patchDoc(token, pid, `periods/${encodeURIComponent(ps)}`, {
-        symbol: ps, updatedAt: Date.now(),
-        week: { changePct: Math.round(wc * 100) / 100, series: wk.series || [], explanation: we?.explanation || null, confidence: we?.confidence || null, sources: we?.sources || [] },
-        month: { changePct: Math.round(mc * 100) / 100, series: mo.series || [], explanation: me?.explanation || null, confidence: me?.confidence || null, sources: me?.sources || [] },
-      })
-    } catch {
-      /* skip */
+      const existing = await getDoc(token, pid, `periods/${encodeURIComponent(ps)}`).catch(() => null)
+      const { doc } = await buildPeriodsDoc({ symbol: ps, nameHe: g.repName || ps, keys, existing, fetchSnapshot, explainMove, sleep: () => sleep(4500) })
+      await patchDoc(token, pid, `periods/${encodeURIComponent(ps)}`, doc)
+    } catch (e) {
+      logEvent('error', { stage: 'store-periods', symbol: ps, error: String(e) })
     }
   }
-  console.log('morning job done for', dateStr)
 }
 
 // On-demand generation for a single instrument (when a user just added it) — today's brief +
@@ -205,33 +210,22 @@ async function primeSymbol(env, symbol, nameHe, isIndex) {
   const dateStr = ilDateISO()
   const session = Math.floor(minutesInZone('Asia/Jerusalem').min / 60) < 12 ? 'morning' : 'midday'
   const keys = { geminiKey: env.GEMINI_API_KEY, geminiModel: env.GEMINI_MODEL, openaiKey: env.OPENAI_API_KEY, openaiModel: env.OPENAI_MODEL }
-  const news = await telegramContext() // ground the new stock's insight in real current headlines
+  const news = buildNewsContext(await fetchHeadlines(), { market: marketOf(symbol), nameHe, symbol }) // ground the new stock's insight in real current headlines
 
   // Current-day change so the just-added stock's insight matches its actual direction.
   let changePct = null
   if (!symbol.startsWith('X-')) { try { changePct = (await fetchSnapshot(symbol)).changePct } catch { /* ignore */ } }
 
   try {
-    const a = await assessOpen({ nameHe, symbol: isIndex ? '' : symbol, date: dateStr, isIndex, session, changePct, newsContext: news }, keys)
+    const a = await assessOpen({ nameHe, symbol: isIndex ? '' : symbol, market: marketOf(symbol), date: dateStr, isIndex, session, changePct, newsContext: news }, keys)
     await patchDoc(token, pid, `briefs/${encodeURIComponent(`${symbol}__${dateStr}`)}`, {
       priceSymbol: symbol, date: dateStr, session, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], at: Date.now(),
     })
-  } catch (e) { console.log('prime brief error', String(e)) }
+  } catch (e) { logEvent('warn', { stage: e.stage || 'brief', symbol, period: 'day', error: e.message }) }
 
   if (symbol.startsWith('X-')) return // manual-price stocks have no Yahoo series
-  try {
-    const pchg = (snap) => { const v = (snap.series || []).map((p) => p.v).filter((x) => x != null); return v.length > 1 ? ((v[v.length - 1] - v[0]) / v[0]) * 100 : 0 }
-    const wk = await fetchSnapshot(symbol, { range: '5d', interval: '30m' })
-    const mo = await fetchSnapshot(symbol, { range: '1mo', interval: '1d' })
-    const wc = pchg(wk), mc = pchg(mo)
-    const we = await explainMove({ nameHe, symbol, changePct: wc, direction: wc >= 0 ? 'up' : 'down', date: dateStr, period: 'week', newsContext: news }, keys).catch(() => null)
-    const me = await explainMove({ nameHe, symbol, changePct: mc, direction: mc >= 0 ? 'up' : 'down', date: dateStr, period: 'month', newsContext: news }, keys).catch(() => null)
-    await patchDoc(token, pid, `periods/${encodeURIComponent(symbol)}`, {
-      symbol, updatedAt: Date.now(),
-      week: { changePct: Math.round(wc * 100) / 100, series: wk.series || [], explanation: we?.explanation || null, confidence: we?.confidence || null, sources: we?.sources || [] },
-      month: { changePct: Math.round(mc * 100) / 100, series: mo.series || [], explanation: me?.explanation || null, confidence: me?.confidence || null, sources: me?.sources || [] },
-    })
-  } catch (e) { console.log('prime periods error', String(e)) }
+  const groups = new Map([[symbol, { priceSymbol: symbol, repName: nameHe, isOther: false }]])
+  await refreshPeriods(token, pid, groups, keys, (ms) => new Promise((r) => setTimeout(r, ms)))
 }
 
 function cors(origin) {

@@ -10,7 +10,9 @@ import { assessOpen, buildMorningHtml } from '../lib/morning.js'
 import { bumpUsage } from '../lib/usage.js'
 import { fetchSnapshot } from '../lib/yahoo.js'
 import { explainMove } from '../lib/explain.js'
-import { telegramContext } from '../lib/telegram.js'
+import { fetchHeadlines, buildNewsContext } from '../lib/telegram.js'
+import { buildPeriodsDoc, marketOf } from '../lib/periods.js'
+import { logEvent } from '../lib/validate.js'
 
 const TZ = 'Asia/Jerusalem'
 
@@ -57,22 +59,24 @@ async function main() {
     if (!ps) continue
     const isOther = w.kind === 'other'
     if (!groups.has(ps)) groups.set(ps, { priceSymbol: ps, repName: w.nameHe, isIndex: snaps[ps]?.isIndex, symbol: isOther ? '' : ps })
-    if (snaps[ps]?.isIndex) groups.get(ps).repName = w.nameHe // prefer index name if present
+    if (w.symbol === ps) groups.get(ps).repName = w.nameHe // describe the group by the instrument that IS the price symbol
   }
 
-  const news = await telegramContext() // real-time headlines to ground insights (anti-hallucination)
+  const headlines = await fetchHeadlines() // real-time headlines to ground insights (anti-hallucination)
   const assessments = {}
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
   let geminiCalls = 0
   for (const g of groups.values()) {
     try {
       geminiCalls++
+      const market = marketOf(g.priceSymbol)
+      const news = buildNewsContext(headlines, { market, nameHe: g.repName, symbol: g.priceSymbol })
       assessments[g.priceSymbol] = await assessOpen(
-        { nameHe: g.repName, symbol: g.symbol, date: dateStr, isIndex: !!g.isIndex, session, changePct: session === 'midday' ? snaps[g.priceSymbol]?.changePct : null, newsContext: news },
+        { nameHe: g.repName, symbol: g.symbol, market, date: dateStr, isIndex: !!g.isIndex, session, changePct: session === 'midday' ? snaps[g.priceSymbol]?.changePct : null, newsContext: news },
         keys,
       )
     } catch (e) {
-      console.warn(`assess failed for ${g.priceSymbol}: ${e.message}`)
+      logEvent('warn', { stage: e.stage || 'brief', symbol: g.priceSymbol, period: 'day', session, error: e.message })
     }
     await sleep(4500) // pace to stay under Gemini's ~20 requests/minute free limit
   }
@@ -93,40 +97,25 @@ async function main() {
   }
   await bumpUsage(db, dateStr, { geminiCalls, firestoreWrites: briefWrites })
 
-  // Once a day (morning): compute week/month period data + explanations → periods/{priceSymbol}.
-  if (session === 'morning') {
+  // Week/month period data + explanations → periods/{priceSymbol}. Explanations are keyed by the
+  // exact window, so the midday run only refreshes the numbers (no extra LLM calls).
+  {
     const priceSyms = new Set()
     items.forEach((w) => {
       if (w.kind !== 'other') priceSyms.add(w.priceSymbol || w.symbol)
     })
-    const pchg = (snap) => {
-      const v = (snap.series || []).map((p) => p.v).filter((x) => x != null)
-      return v.length > 1 ? ((v[v.length - 1] - v[0]) / v[0]) * 100 : 0
-    }
     let periodCalls = 0
     for (const ps of priceSyms) {
       try {
-        const repName = groups.get(ps)?.repName || ps
-        const wk = await fetchSnapshot(ps, { range: '5d', interval: '30m' })
-        const mo = await fetchSnapshot(ps, { range: '1mo', interval: '1d' })
-        const wkChg = pchg(wk)
-        const moChg = pchg(mo)
-        const wkExp = await explainMove({ nameHe: repName, symbol: ps, changePct: wkChg, direction: wkChg >= 0 ? 'up' : 'down', date: dateStr, period: 'week', newsContext: news }, keys).catch(() => null)
-        await sleep(4500)
-        const moExp = await explainMove({ nameHe: repName, symbol: ps, changePct: moChg, direction: moChg >= 0 ? 'up' : 'down', date: dateStr, period: 'month', newsContext: news }, keys).catch(() => null)
-        await sleep(4500)
-        periodCalls += 2
-        await db.collection('periods').doc(ps).set({
-          symbol: ps,
-          updatedAt: Date.now(),
-          week: { changePct: Math.round(wkChg * 100) / 100, series: wk.series || [], explanation: wkExp?.explanation || null, confidence: wkExp?.confidence || null, sources: wkExp?.sources || [] },
-          month: { changePct: Math.round(moChg * 100) / 100, series: mo.series || [], explanation: moExp?.explanation || null, confidence: moExp?.confidence || null, sources: moExp?.sources || [] },
-        })
+        const existing = (await db.collection('periods').doc(ps).get()).data() || null
+        const { doc, errors } = await buildPeriodsDoc({ symbol: ps, nameHe: groups.get(ps)?.repName || ps, keys, existing, fetchSnapshot, explainMove, sleep: () => sleep(4500) })
+        periodCalls += 2 - errors.length
+        await db.collection('periods').doc(ps).set(doc)
       } catch (e) {
-        console.warn(`period failed for ${ps}: ${e.message}`)
+        logEvent('error', { stage: 'store-periods', symbol: ps, error: e.message })
       }
     }
-    await bumpUsage(db, dateStr, { geminiCalls: periodCalls, firestoreWrites: priceSyms.size })
+    await bumpUsage(db, dateStr, { geminiCalls: Math.max(0, periodCalls), firestoreWrites: priceSyms.size })
     console.log(`Periods: updated ${priceSyms.size} symbols.`)
   }
 
