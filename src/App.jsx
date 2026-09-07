@@ -15,6 +15,8 @@ import { subscribeExplanations } from './services/explanations'
 import { subscribeBriefs } from './services/briefs'
 import { subscribePeriods } from './services/periods'
 
+const todayIsrael = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date())
+
 export default function App() {
   const [user, setUser] = useState(null)
   const [authReady, setAuthReady] = useState(false)
@@ -44,6 +46,14 @@ export default function App() {
   // Track the signed-in user (session is restored automatically on reload).
   useEffect(() => subscribeAuth((u) => { setUser(u); setAuthReady(true) }), [])
 
+  // The explanations/briefs queries are pinned to the Israel calendar date at subscribe time. A tab
+  // left open past midnight would keep showing yesterday's texts as "today" — re-subscribe on rollover.
+  const [ilDate, setIlDate] = useState(todayIsrael())
+  useEffect(() => {
+    const id = setInterval(() => { const d = todayIsrael(); setIlDate((prev) => (prev === d ? prev : d)) }, 60000)
+    return () => clearInterval(id)
+  }, [])
+
   // Live data — only while signed in. The watchlist is scoped to the user's uid; market data and
   // AI insights (snapshots/explanations/briefs/periods) are shared across all users by symbol.
   useEffect(() => {
@@ -64,7 +74,7 @@ export default function App() {
       unsubB()
       unsubP()
     }
-  }, [user])
+  }, [user, ilDate])
 
   // Close the dropdown on outside click.
   useEffect(() => {
@@ -180,7 +190,7 @@ export default function App() {
     }
   }
 
-  const todayIL = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date())
+  const todayIL = ilDate
   const stocks = watchlist.map((w) => {
     const priceSym = w.priceSymbol || w.symbol
     const snap = snapshots[priceSym] || liveQuotes[priceSym]

@@ -11,7 +11,9 @@ import { DateTime } from 'luxon'
 import { fetchSnapshots } from '../lib/yahoo.js'
 import { classify } from '../lib/volatility.js'
 import { explainMove } from '../lib/explain.js'
-import { telegramContext } from '../lib/telegram.js'
+import { fetchHeadlines, buildNewsContext } from '../lib/telegram.js'
+import { marketOf } from '../lib/periods.js'
+import { logEvent } from '../lib/validate.js'
 import { bumpUsage } from '../lib/usage.js'
 
 const TZ = 'Asia/Jerusalem'
@@ -57,7 +59,7 @@ async function main() {
   let ok = 0
   for (const snap of snapshots) {
     if (snap.error) {
-      console.warn(`skip ${snap.symbol}: ${snap.error}`)
+      logEvent('warn', { stage: 'price', symbol: snap.symbol, error: snap.error })
       continue
     }
     byPrice[snap.symbol] = snap
@@ -118,13 +120,21 @@ async function main() {
   let explanationWrites = 0
   if (keys.geminiKey || keys.openaiKey) {
     const pending = await db.collection('events').where('needsExplanation', '==', true).get()
-    const news = pending.size ? await telegramContext() : ''
+    const headlines = pending.size ? await fetchHeadlines() : []
     let explained = 0
     for (const d of pending.docs) {
       const ev = d.data()
+      // Never explain a previous day's event with today's headlines — retire it instead.
+      if (ev.date !== dateStr) {
+        logEvent('warn', { stage: 'explain', symbol: ev.symbol, period: 'day', date: ev.date, error: 'stale unexplained event retired' })
+        await d.ref.update({ needsExplanation: false })
+        continue
+      }
       try {
         geminiCalls++
-        const r = await explainMove({ ...ev, newsContext: news }, keys)
+        const market = marketOf(ev.priceSymbol || ev.symbol)
+        const news = buildNewsContext(headlines, { market, nameHe: ev.nameHe, symbol: ev.priceSymbol || ev.symbol })
+        const r = await explainMove({ ...ev, market, newsContext: news }, keys)
         await db.collection('explanations').doc(d.id).set({
           symbol: ev.symbol,
           nameHe: ev.nameHe,
@@ -141,7 +151,7 @@ async function main() {
         explanationWrites += 2
         explained++
       } catch (e) {
-        console.warn(`explain failed for ${d.id}: ${e.message}`)
+        logEvent('warn', { stage: e.stage || 'llm', symbol: ev.symbol, period: 'day', date: ev.date, changePct: ev.changePct, error: e.message })
       }
     }
     console.log(`Explanations: generated ${explained}.`)
