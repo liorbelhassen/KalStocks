@@ -128,14 +128,20 @@ test('buildPeriodsDoc: reuses explanation for the same window, regenerates for a
   assert.equal(llmCalls, 4)
   assert.notEqual(next.doc.week.key, first.doc.week.key)
 
-  // LLM failure: explanation is null (not a placeholder string), the numbers are still written, other period unaffected.
+  // LLM failure on a ≥0.5% move: a measured-data analysis is written, the numbers are still written, other period unaffected.
   const failing = async (input) => { if (input.period === 'week') throw Object.assign(new Error('boom'), { stage: 'llm' }); return explainMove(input) }
   const failed = await buildPeriodsDoc({ symbol: 'POLI.TA', nameHe: 'בנק הפועלים', now: NOW + 2 * 86400000, keys: {}, existing: null, fetchSnapshot, explainMove: failing })
-  assert.equal(failed.doc.week.explanation, null)
+  assert.ok(failed.doc.week.explanation.startsWith('בנק הפועלים עלתה 10.00% בשבוע האחרון'))
+  assert.equal(failed.doc.week.verdict, 'נתונים בלבד')
   assert.equal(failed.doc.week.changePct, 10)
   assert.ok(failed.doc.month.explanation)
   assert.equal(failed.errors.length, 1)
   assert.deepEqual([failed.errors[0].stage, failed.errors[0].symbol, failed.errors[0].period], ['llm', 'POLI.TA', 'week'])
+
+  // Below 0.5% there is nothing to explain: failure leaves the explanation empty.
+  const flat = async () => ({ priceIls: 100.2, previousClose: 100, at: NOW, series: [{ t: NOW, v: 100.2 }] })
+  const quiet = await buildPeriodsDoc({ symbol: 'POLI.TA', nameHe: 'בנק הפועלים', now: NOW, keys: {}, existing: null, fetchSnapshot: flat, explainMove: failing })
+  assert.equal(quiet.doc.week.explanation, null)
 })
 
 test('isPeriodCurrent: window ending recently is current; old or unkeyed entries are stale', () => {

@@ -12,8 +12,9 @@ import { askWithSearch } from '../lib/llm.js'
 import { classify, triggerBand } from '../lib/volatility.js'
 import { quotedInAgorot } from '../lib/quote.js'
 import { fetchHeadlines, buildNewsContext } from '../lib/telegram.js'
-import { buildPeriodsDoc, marketOf } from '../lib/periods.js'
+import { buildPeriodsDoc, marketOf, marketTz } from '../lib/periods.js'
 import { logEvent } from '../lib/validate.js'
+import { measuredAnalysis } from '../lib/analysis.js'
 
 const ALLOWED = ['https://kalstocks1.web.app', 'http://localhost:5175', 'http://localhost:5173']
 
@@ -94,11 +95,27 @@ async function pollChunk(env, { items, dateStr, session }) {
   }
 }
 
+// Numbers-only brief for when the AI path throws — a significant move is never left without text.
+const measuredBrief = ({ nameHe, isIndex, changePct, series, base, market }) => {
+  const text = changePct != null && Math.abs(changePct) >= 0.5
+    ? measuredAnalysis({ subject: nameHe, isIndex, changePct, series, base, tz: marketTz(market) })
+    : null
+  return text && { assessment: text, sentiment: changePct > 0 ? 'חיובי' : 'שלילי', confidence: 'נמוכה', sources: [], verdict: 'נתונים בלבד' }
+}
+const headlines = () => fetchHeadlines().catch(() => [])
+
 async function explainMover(env, { priceSymbol: ps, nameHe, isIndex, changePct, series, base, band, dateStr, session }) {
   const { token, pid } = await firestore(env)
   const market = marketOf(ps)
-  const news = buildNewsContext(await fetchHeadlines(), { market, nameHe, symbol: ps })
-  const a = await assessOpen({ nameHe, symbol: isIndex ? '' : ps, priceSymbol: ps, market, date: dateStr, isIndex, session, changePct, series, base, newsContext: news }, llmKeys(env))
+  let a
+  try {
+    const news = buildNewsContext(await headlines(), { market, nameHe, symbol: ps })
+    a = await assessOpen({ nameHe, symbol: isIndex ? '' : ps, priceSymbol: ps, market, date: dateStr, isIndex, session, changePct, series, base, newsContext: news }, llmKeys(env))
+  } catch (e) {
+    a = measuredBrief({ nameHe, isIndex, changePct, series, base, market })
+    if (!a) throw e
+    logEvent('warn', { stage: e.stage || 'brief', symbol: ps, period: 'day', changePct, fallback: 'measured', error: String(e) })
+  }
   await patchDoc(token, pid, `briefs/${encodeURIComponent(`${ps}__${dateStr}`)}`, {
     priceSymbol: ps, date: dateStr, session, band, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], verdict: a.verdict, at: Date.now(),
   })
@@ -195,7 +212,7 @@ async function refreshSymbol(env, { g, session, dateStr }) {
   const { token, pid } = await firestore(env)
   const keys = llmKeys(env)
   const market = marketOf(g.priceSymbol)
-  const news = buildNewsContext(await fetchHeadlines(), { market, nameHe: g.repName, symbol: g.priceSymbol }) // real headlines (anti-hallucination)
+  const news = buildNewsContext(await headlines(), { market, nameHe: g.repName, symbol: g.priceSymbol }) // real headlines (anti-hallucination)
   let a = null
   try {
     a = await assessOpen({ nameHe: g.repName, symbol: g.symbol, priceSymbol: g.priceSymbol, market, date: dateStr, isIndex: !!g.isIndex, session, changePct: session === 'midday' || g.useChange ? g.changePct : null, series: g.series, base: g.base, newsContext: news }, keys)
@@ -204,6 +221,13 @@ async function refreshSymbol(env, { g, session, dateStr }) {
     })
   } catch (e) {
     logEvent('warn', { stage: e.stage || 'brief', symbol: g.priceSymbol, period: 'day', session, error: e.message })
+    const fb = !a && measuredBrief({ nameHe: g.repName, isIndex: !!g.isIndex, changePct: g.changePct, series: g.series, base: g.base, market })
+    if (fb) {
+      a = fb
+      await patchDoc(token, pid, `briefs/${encodeURIComponent(`${g.priceSymbol}__${dateStr}`)}`, {
+        priceSymbol: g.priceSymbol, date: dateStr, session, ...fb, at: Date.now(),
+      }).catch((err) => logEvent('error', { stage: 'store-brief', symbol: g.priceSymbol, error: String(err) }))
+    }
   }
   if (!g.isOther) await refreshPeriods(token, pid, g, keys) // no Yahoo series for manual-price stocks
   return a
