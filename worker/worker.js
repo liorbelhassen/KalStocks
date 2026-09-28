@@ -75,7 +75,7 @@ async function pollPrices(env) {
     if (done.has(ps)) continue
     const snap = byPrice[ps]
     if (!snap) continue
-    const c = classify(snap, w.thresholdPct || 3)
+    const c = classify(snap, w.thresholdPct || 0.5)
     if (!c.significant || (priorBand[ps] || 0) >= c.band) continue // not significant, or level already explained
     done.add(ps)
     try {

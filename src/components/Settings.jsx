@@ -4,7 +4,7 @@ import { kindLabel } from '../catalog'
 const PRESETS = [0.5, 1, 2, 3, 5]
 
 function ThresholdRow({ item, onCommit }) {
-  const [val, setVal] = useState(String(item.thresholdPct ?? 3))
+  const [val, setVal] = useState(String(item.thresholdPct ?? 0.5))
 
   const commit = (v) => {
     const n = Number(v)
@@ -100,8 +100,8 @@ export default function Settings({ watchlist, onClose, onUpdate, insightFontSize
 
         <p style={{ color: 'var(--text-dim)', fontSize: 13, lineHeight: 1.6, marginTop: 0 }}>
           הסף קובע איזו תנועה נחשבת "משמעותית" ומפעילה הסבר. תנודה יומית שחוצה את הסף — או תנודתיות
-          תוך־יומית גדולה (מעל פי 2 מהסף) — תיצור הסבר. שים לב: <b>מדדים זזים פחות ממניות</b>, לכן סף
-          של 1% למדד דומה בעוצמתו לסף של 3% למניה. אפשר להגדיר לכל נייר בנפרד.
+          תוך־יומית גדולה (מעל פי 2 מהסף) — תיצור הסבר. ברירת המחדל היא <b>0.5%</b> לכל נייר, כך שגם ביום מסחר רגיל
+          יתקבל הסבר. אפשר להגדיר לכל נייר בנפרד (למשל סף גבוה יותר למניות תנודתיות).
         </p>
 
         {watchlist.length === 0 ? (

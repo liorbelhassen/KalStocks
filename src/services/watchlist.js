@@ -11,11 +11,10 @@ import {
   where,
 } from 'firebase/firestore'
 
-// Sensible default trigger threshold by instrument type — indices move far less than
-// individual stocks, so a 1% index move is roughly as notable as a 3% stock move.
-export function defaultThresholdFor(kind) {
-  if (kind === 'index' || kind === 'etf') return 1
-  return 3
+// Default trigger threshold: 0.5% for every instrument type, so ordinary trading days get an AI
+// explanation. Users can raise it per symbol in Settings (e.g. for volatile stocks).
+export function defaultThresholdFor() {
+  return 0.5
 }
 
 // Each watchlist doc is owned by one user (stamped with their auth uid). Doc id = `${uid}__${symbol}`
