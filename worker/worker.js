@@ -8,7 +8,7 @@ import { assessOpen, buildMorningHtml } from '../lib/morning.js'
 import { explainMove } from '../lib/explain.js'
 import { visionExtract } from '../lib/vision.js'
 import { askWithSearch } from '../lib/llm.js'
-import { classify } from '../lib/volatility.js'
+import { classify, triggerBand } from '../lib/volatility.js'
 import { quotedInAgorot } from '../lib/quote.js'
 import { fetchHeadlines, buildNewsContext } from '../lib/telegram.js'
 import { buildPeriodsDoc, marketOf } from '../lib/periods.js'
@@ -77,7 +77,8 @@ async function pollPrices(env) {
     const snap = byPrice[ps]
     if (!snap) continue
     const c = classify(snap, w.thresholdPct || 0.5)
-    if (!c.significant || (priorBand[ps] || 0) >= c.band) continue // not significant, or level already explained
+    const band = triggerBand(c)
+    if (!c.significant || (priorBand[ps] || 0) >= band) continue // not significant, or level already explained
     done.add(ps)
     try {
       if (headlines === null) headlines = await fetchHeadlines() // fetch once, only if there's a mover to explain
@@ -86,7 +87,7 @@ async function pollPrices(env) {
       const news = buildNewsContext(headlines, { market, nameHe: w.nameHe, symbol: ps })
       const a = await assessOpen({ nameHe: w.nameHe, symbol: isIndex ? '' : ps, market, date: dateStr, isIndex, session, changePct: snap.changePct, newsContext: news }, keys)
       await patchDoc(token, sa.project_id, `briefs/${encodeURIComponent(`${ps}__${dateStr}`)}`, {
-        priceSymbol: ps, date: dateStr, session, band: c.band, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], at: Date.now(),
+        priceSymbol: ps, date: dateStr, session, band, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], at: Date.now(),
       })
       await sleep(2000)
     } catch (e) {
