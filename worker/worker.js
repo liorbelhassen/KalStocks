@@ -112,7 +112,7 @@ const ilDateHe = () =>
 // writes today's briefs + week/month period data & explanations (per symbol, see `refreshSymbol`).
 // Midday (13:00) refreshes the briefs and the week/month numbers — no email. `force` lets the
 // admin `refresh` action run a session outside its slot.
-async function morningJob(env, { force = null, email = true } = {}) {
+async function morningJob(env, { force = null, email = true, only = null } = {}) {
   if (!env.SERVICE_ACCOUNT || !hasLlm(env)) return { skipped: true }
   const ilHour = Math.floor(minutesInZone('Asia/Jerusalem').min / 60)
   const session = force || (ilHour === 9 ? 'morning' : ilHour === 13 ? 'midday' : null)
@@ -130,7 +130,7 @@ async function morningJob(env, { force = null, email = true } = {}) {
   const groups = new Map()
   for (const w of items) {
     const ps = w.priceSymbol || w.symbol
-    if (!ps) continue
+    if (!ps || (only && !only.includes(ps))) continue
     const isOther = w.kind === 'other'
     if (!groups.has(ps)) groups.set(ps, { priceSymbol: ps, repName: w.nameHe, isIndex: !!snaps[ps]?.isIndex, isOther, symbol: isOther ? '' : ps, changePct: snaps[ps]?.changePct ?? null })
     // Several ETFs share one price symbol (e.g. TA35.TA). Describe the group by the instrument that
@@ -263,7 +263,7 @@ export default {
       // Runs in the request itself (a waitUntil task would be cut off after 30 s).
       if (body.action === 'refresh') {
         if (!env.ADMIN_KEY || request.headers.get('X-Admin-Key') !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403, origin)
-        return json(await morningJob(env, { force: body.session === 'midday' ? 'midday' : 'morning', email: false }), 200, origin)
+        return json(await morningJob(env, { force: body.session === 'midday' ? 'midday' : 'morning', email: false, only: Array.isArray(body.symbols) ? body.symbols : null }), 200, origin)
       }
 
       // Action: generate today/week/month reviews for a just-added instrument, in the background,
