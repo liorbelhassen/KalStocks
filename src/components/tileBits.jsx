@@ -27,7 +27,7 @@ export function periodInsight(p, period, now = Date.now()) {
   if (!p) return null
   const label = period === 'week' ? '📅 השבוע' : '🗓️ החודש'
   if (!isPeriodCurrent(p, now)) return { text: 'הנתונים לתקופה זו עדיין לא עודכנו — הם יופיעו אחרי העדכון הבא.', confidence: null, sources: [], label }
-  if (p.explanation) return { text: p.explanation, confidence: p.confidence, sources: p.sources || [], label }
+  if (p.explanation && p.verdict) return { text: p.explanation, confidence: p.confidence, sources: p.sources || [], label }
   const dir = (p.changePct ?? 0) >= 0 ? 'עלה' : 'ירד'
   const periodHe = period === 'week' ? 'בשבוע האחרון' : 'בחודש האחרון'
   return { text: `הנייר ${dir} ${Math.abs(p.changePct ?? 0).toFixed(1)}% ${periodHe}.`, confidence: null, sources: [], label }

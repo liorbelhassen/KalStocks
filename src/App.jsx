@@ -202,7 +202,8 @@ export default function App() {
     const needsPrice = isIlEtf || w.kind === 'other'
     const effectivePrice = w.manualPrice != null ? w.manualPrice : needsPrice ? null : snap?.priceIls
     const exp = explanations[w.symbol]
-    const brief = briefs[priceSym]
+    // Only texts that passed the worker's fact-check (`verdict`) are shown as AI insights.
+    const brief = briefs[priceSym]?.verdict ? briefs[priceSym] : null
     const hhmm = (ms) => (ms ? new Date(ms).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '')
     // Priority: significant-event AI explanation → morning AI brief → a data-derived baseline
     // (so every instrument — indices included — always shows an insight, upgraded to AI when available).
@@ -217,7 +218,7 @@ export default function App() {
     }
     // The brief is the authoritative, fresh, direction-aware insight (morning/midday/volatility trigger).
     // A legacy event explanation only fills in when there's no brief today; never let a stale one win.
-    const expFresh = exp && exp.date === todayIL
+    const expFresh = exp && exp.date === todayIL && !!exp.verdict
     const insight = brief
       ? { text: brief.assessment, confidence: brief.confidence, sources: brief.sources || [], at: hhmm(brief.at), ts: brief.at, kind: 'brief', session: brief.session }
       : expFresh
