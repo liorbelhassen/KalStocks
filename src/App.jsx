@@ -5,6 +5,8 @@ import Settings from './components/Settings'
 import { searchCatalog, matchInstrument, kindLabel, sectorOf, SECTOR_ORDER } from './catalog'
 import { logoUrl, isFlag } from '../lib/logos'
 import { quotedInAgorot } from '../lib/quote'
+import { measuredAnalysis } from '../lib/analysis'
+import { marketTz } from '../lib/periods'
 import { subscribeWatchlist, addToWatchlist, removeFromWatchlist, updateThreshold, updateQuantity, updatePrice, adoptLegacyWatchlist } from './services/watchlist'
 import { analyzeScreenshot, quoteSymbol, searchYahoo, resolveSymbol, primeInstrument } from './services/vision'
 import { subscribeAuth, signOutUser } from './services/auth'
@@ -211,10 +213,10 @@ export default function App() {
       const c = snap?.changePct
       if (c == null) return null
       const isIdx = snap.isIndex
-      const up = c >= 0
-      const verb = isIdx ? (up ? 'עלה' : 'ירד') : up ? 'עלתה' : 'ירדה'
-      const desc = Math.abs(c) < 0.3 ? `${isIdx ? 'נסחר' : 'נסחרת'} סביב רמת הפתיחה, ללא שינוי מהותי היום` : `${verb} ${Math.abs(c).toFixed(1)}% היום, במגמה ${up ? 'חיובית' : 'שלילית'}`
-      return { text: `${isIdx ? 'המדד' : 'המניה'} ${desc}.`, confidence: null, sources: [], at: '', kind: 'data' }
+      const text = Math.abs(c) < 0.3
+        ? `${isIdx ? 'המדד' : 'המניה'} ${isIdx ? 'נסחר' : 'נסחרת'} סביב רמת הפתיחה, ללא שינוי מהותי היום.`
+        : measuredAnalysis({ subject: isIdx ? 'המדד' : 'המניה', isIndex: isIdx, changePct: c, series: snap.series, base: snap.previousClose, tz: marketTz(mkt) })
+      return { text, confidence: null, sources: [], at: '', kind: 'data' }
     }
     // The brief is the authoritative, fresh, direction-aware insight (morning/midday/volatility trigger).
     // A legacy event explanation only fills in when there's no brief today; never let a stale one win.

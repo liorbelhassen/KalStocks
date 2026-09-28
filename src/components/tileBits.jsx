@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { isPeriodCurrent } from '../../lib/periods'
+import { isPeriodCurrent, marketTz } from '../../lib/periods'
+import { measuredAnalysis } from '../../lib/analysis'
 
 export const fmt = (n) => n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 export const fmt0 = (n) => n.toLocaleString('he-IL', { maximumFractionDigits: 0 })
@@ -28,9 +29,8 @@ export function periodInsight(p, period, now = Date.now()) {
   const label = period === 'week' ? '📅 השבוע' : '🗓️ החודש'
   if (!isPeriodCurrent(p, now)) return { text: 'הנתונים לתקופה זו עדיין לא עודכנו — הם יופיעו אחרי העדכון הבא.', confidence: null, sources: [], label }
   if (p.explanation && p.verdict) return { text: p.explanation, confidence: p.confidence, sources: p.sources || [], label }
-  const dir = (p.changePct ?? 0) >= 0 ? 'עלה' : 'ירד'
-  const periodHe = period === 'week' ? 'בשבוע האחרון' : 'בחודש האחרון'
-  return { text: `הנייר ${dir} ${Math.abs(p.changePct ?? 0).toFixed(1)}% ${periodHe}.`, confidence: null, sources: [], label }
+  const text = measuredAnalysis({ subject: 'הנייר', changePct: p.changePct ?? 0, period, series: p.series, tz: marketTz(p.market) })
+  return { text, confidence: null, sources: [], label }
 }
 
 export function todayLabel(explanation) {

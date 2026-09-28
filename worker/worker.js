@@ -87,18 +87,18 @@ async function pollChunk(env, { items, dateStr, session }) {
     const band = triggerBand(c)
     if (!c.significant || (prior[briefPath(it.priceSymbol)]?.band || 0) >= band) continue // not significant, or level already explained
     try {
-      await env.JOBS.explainMover({ priceSymbol: it.priceSymbol, nameHe: it.nameHe, isIndex: !!snap.isIndex, changePct: snap.changePct, band, dateStr, session })
+      await env.JOBS.explainMover({ priceSymbol: it.priceSymbol, nameHe: it.nameHe, isIndex: !!snap.isIndex, changePct: snap.changePct, series: snap.series || [], base: snap.previousClose ?? null, band, dateStr, session })
     } catch (e) {
       logEvent('warn', { stage: e.stage || 'brief', symbol: it.priceSymbol, period: 'day', changePct: snap.changePct, error: String(e) })
     }
   }
 }
 
-async function explainMover(env, { priceSymbol: ps, nameHe, isIndex, changePct, band, dateStr, session }) {
+async function explainMover(env, { priceSymbol: ps, nameHe, isIndex, changePct, series, base, band, dateStr, session }) {
   const { token, pid } = await firestore(env)
   const market = marketOf(ps)
   const news = buildNewsContext(await fetchHeadlines(), { market, nameHe, symbol: ps })
-  const a = await assessOpen({ nameHe, symbol: isIndex ? '' : ps, priceSymbol: ps, market, date: dateStr, isIndex, session, changePct, newsContext: news }, llmKeys(env))
+  const a = await assessOpen({ nameHe, symbol: isIndex ? '' : ps, priceSymbol: ps, market, date: dateStr, isIndex, session, changePct, series, base, newsContext: news }, llmKeys(env))
   await patchDoc(token, pid, `briefs/${encodeURIComponent(`${ps}__${dateStr}`)}`, {
     priceSymbol: ps, date: dateStr, session, band, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], verdict: a.verdict, at: Date.now(),
   })
@@ -132,7 +132,7 @@ async function morningJob(env, { force = null, email = true, only = null } = {})
     const ps = w.priceSymbol || w.symbol
     if (!ps || (only && !only.includes(ps))) continue
     const isOther = w.kind === 'other'
-    if (!groups.has(ps)) groups.set(ps, { priceSymbol: ps, repName: w.nameHe, isIndex: !!snaps[ps]?.isIndex, isOther, symbol: isOther ? '' : ps, changePct: snaps[ps]?.changePct ?? null })
+    if (!groups.has(ps)) groups.set(ps, { priceSymbol: ps, repName: w.nameHe, isIndex: !!snaps[ps]?.isIndex, isOther, symbol: isOther ? '' : ps, changePct: snaps[ps]?.changePct ?? null, series: snaps[ps]?.series || [], base: snaps[ps]?.previousClose ?? null })
     // Several ETFs share one price symbol (e.g. TA35.TA). Describe the group by the instrument that
     // IS the price symbol (the index), never by whichever ETF happened to be listed last.
     if (w.symbol === ps) groups.get(ps).repName = w.nameHe
@@ -198,7 +198,7 @@ async function refreshSymbol(env, { g, session, dateStr }) {
   const news = buildNewsContext(await fetchHeadlines(), { market, nameHe: g.repName, symbol: g.priceSymbol }) // real headlines (anti-hallucination)
   let a = null
   try {
-    a = await assessOpen({ nameHe: g.repName, symbol: g.symbol, priceSymbol: g.priceSymbol, market, date: dateStr, isIndex: !!g.isIndex, session, changePct: session === 'midday' || g.useChange ? g.changePct : null, newsContext: news }, keys)
+    a = await assessOpen({ nameHe: g.repName, symbol: g.symbol, priceSymbol: g.priceSymbol, market, date: dateStr, isIndex: !!g.isIndex, session, changePct: session === 'midday' || g.useChange ? g.changePct : null, series: g.series, base: g.base, newsContext: news }, keys)
     await patchDoc(token, pid, `briefs/${encodeURIComponent(`${g.priceSymbol}__${dateStr}`)}`, {
       priceSymbol: g.priceSymbol, date: dateStr, session, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], verdict: a.verdict, at: Date.now(),
     })
@@ -228,10 +228,11 @@ async function primeSymbol(env, symbol, nameHe, isIndex) {
   const dateStr = ilDateISO()
   const session = Math.floor(minutesInZone('Asia/Jerusalem').min / 60) < 12 ? 'morning' : 'midday'
   // Current-day change so the just-added stock's insight matches its actual direction.
-  let changePct = null
-  if (!symbol.startsWith('X-')) { try { changePct = (await fetchSnapshot(symbol)).changePct } catch { /* ignore */ } }
+  let snap = null
+  if (!symbol.startsWith('X-')) { try { snap = await fetchSnapshot(symbol) } catch { /* ignore */ } }
+  const changePct = snap?.changePct ?? null
   const isOther = symbol.startsWith('X-')
-  await refreshSymbol(env, { g: { priceSymbol: symbol, repName: nameHe, isIndex, isOther, symbol: isIndex ? '' : symbol, changePct, useChange: true }, session, dateStr })
+  await refreshSymbol(env, { g: { priceSymbol: symbol, repName: nameHe, isIndex, isOther, symbol: isIndex ? '' : symbol, changePct, series: snap?.series || [], base: snap?.previousClose ?? null, useChange: true }, session, dateStr })
 }
 
 function cors(origin) {
