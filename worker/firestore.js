@@ -115,3 +115,36 @@ export async function patchDoc(token, pid, path, obj) {
   })
   if (!res.ok) throw new Error(`patch ${path}: ${res.status} ${(await res.text()).slice(0, 150)}`)
 }
+
+const docName = (pid, path) => `projects/${pid}/databases/(default)/documents/${path}`
+
+/** Replace many documents in ONE request (Firestore `commit`) — each call is one Worker subrequest. */
+export async function commitDocs(token, pid, docs) {
+  if (!docs.length) return
+  const writes = docs.map(({ path, obj }) => {
+    const fields = {}
+    for (const k in obj) fields[k] = toValue(obj[k])
+    return { update: { name: docName(pid, path), fields } }
+  })
+  const res = await fetch(`${base(pid)}:commit`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ writes }),
+  })
+  if (!res.ok) throw new Error(`commit ${docs.length} docs: ${res.status} ${(await res.text()).slice(0, 150)}`)
+}
+
+/** Read many documents in ONE request (Firestore `batchGet`). Returns { path: data | null }. */
+export async function getDocs(token, pid, paths) {
+  const out = Object.fromEntries(paths.map((p) => [p, null]))
+  if (!paths.length) return out
+  const res = await fetch(`${base(pid)}:batchGet`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ documents: paths.map((p) => docName(pid, p)) }),
+  })
+  if (!res.ok) throw new Error(`batchGet ${paths.length} docs: ${res.status} ${(await res.text()).slice(0, 150)}`)
+  const prefix = docName(pid, '')
+  for (const r of await res.json()) if (r.found) out[r.found.name.slice(prefix.length)] = decodeFields(r.found.fields)
+  return out
+}
