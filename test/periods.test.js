@@ -98,7 +98,8 @@ test('computePeriod passes the exact epoch window to Yahoo and throws a staged e
 
 test('isCurrentPeriodEntry: only an entry with the exact current key counts', () => {
   const w = periodWindow({ period: 'week', now: NOW, symbol: 'POLI.TA' })
-  assert.equal(isCurrentPeriodEntry({ key: w.key, explanation: 'x' }, w), true)
+  assert.equal(isCurrentPeriodEntry({ key: w.key, explanation: 'x', verdict: 'אושר' }, w), true)
+  assert.equal(isCurrentPeriodEntry({ key: w.key, explanation: 'written before the fact-check' }, w), false)
   assert.equal(isCurrentPeriodEntry({ key: w.key, explanation: null }, w), false)
   assert.equal(isCurrentPeriodEntry({ explanation: 'legacy, no key' }, w), false)
   assert.equal(isCurrentPeriodEntry({ key: 'POLI.TA__week__2026-08-24_2026-08-31', explanation: 'old' }, w), false)
@@ -109,7 +110,7 @@ const goodHe = 'המניה עלתה בעקבות פרסום דוחות כספי�
 test('buildPeriodsDoc: reuses explanation for the same window, regenerates for a new one, never blanks on failure', async () => {
   const fetchSnapshot = async () => ({ priceIls: 110, previousClose: 100, at: NOW, series: [{ t: NOW, v: 110 }] })
   let llmCalls = 0
-  const explainMove = async (input) => { llmCalls++; return { explanation: `${goodHe} (${input.period})`, confidence: 'גבוהה', sources: [], provider: 'test' } }
+  const explainMove = async (input) => { llmCalls++; return { explanation: `${goodHe} (${input.period})`, confidence: 'גבוהה', sources: [], provider: 'test', verdict: 'אושר' } }
 
   const first = await buildPeriodsDoc({ symbol: 'POLI.TA', nameHe: 'בנק הפועלים', now: NOW, keys: {}, existing: null, fetchSnapshot, explainMove })
   assert.equal(llmCalls, 2)
