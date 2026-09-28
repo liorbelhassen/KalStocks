@@ -73,5 +73,6 @@ test('searchPhrase: US indices are searched by name, so "DJI" drones never match
   const a = [{ title: 'x', host: 'reuters.com' }, { title: 'y', host: 'tech-ish.com' }]
   assert.deepEqual(contextArticles(a, 'US').map((x) => x.host), ['reuters.com'])
   assert.equal(contextArticles(a, 'IL').length, 2)
+  assert.equal(contextArticles([{ title: 'AMAT,NVDA | Stock Prices | Quote Comparison - Yahoo Finance', host: 'finance.yahoo.com' }], 'US').length, 0)
 })
 
