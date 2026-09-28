@@ -116,3 +116,9 @@ test('fetchMarketFacts: day facts drop stale/failed benchmarks; periods use the 
   await fetchMarketFacts({ symbol: 'DSCT.TA', period: 'week', window: w, now, fetchSnapshot })
   assert.deepEqual(seen.at(-1)[1], { interval: '1d', period1: 1, period2: 2 })
 })
+
+test('checkClaims: rejects checker meta-commentary leaking into the published text', () => {
+  const diagnosis = diagnoseMove({ ...ta35, facts })
+  const leaked = `${grounded} לא אומת בסיס לדוחות מאכזבים כגורם המכריע.`
+  assert.equal(checkClaims(leaked, { changePct: -0.49, facts, diagnosis }).reason, 'meta-commentary')
+})
