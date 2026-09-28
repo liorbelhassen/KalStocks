@@ -37,3 +37,13 @@ test('askWithSearch: uncited Gemini answer is returned when no OpenAI key', asyn
   assert.equal(r.text, 'gemini answer')
   assert.deepEqual(r.sources, [])
 })
+
+test('askWithSearch: OpenAI answer without citations uses the searched pages as sources', async () => {
+  const body = { output: [
+    { type: 'web_search_call', action: { type: 'search', sources: [{ type: 'url', url: 'https://www.globes.co.il/news/a' }, { type: 'url', url: 'https://www.globes.co.il/news/b' }, { type: 'url', url: 'https://finance.themarker.com/x' }] } },
+    { type: 'message', content: [{ type: 'output_text', text: 'openai answer', annotations: [] }] },
+  ] }
+  globalThis.fetch = async () => ({ ok: true, json: async () => body, text: async () => JSON.stringify(body) })
+  const r = await askWithSearch('q', { openaiKey: 'o' })
+  assert.deepEqual(r.sources, ['globes.co.il', 'finance.themarker.com'])
+})
