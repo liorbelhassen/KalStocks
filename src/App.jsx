@@ -4,6 +4,7 @@ import FamilyCard from './components/FamilyCard'
 import Settings from './components/Settings'
 import { searchCatalog, matchInstrument, kindLabel, sectorOf, SECTOR_ORDER } from './catalog'
 import { logoUrl, isFlag } from '../lib/logos'
+import { quotedInAgorot } from '../lib/quote'
 import { subscribeWatchlist, addToWatchlist, removeFromWatchlist, updateThreshold, updateQuantity, updatePrice, adoptLegacyWatchlist } from './services/watchlist'
 import { analyzeScreenshot, quoteSymbol, searchYahoo, resolveSymbol, primeInstrument } from './services/vision'
 import { subscribeAuth, signOutUser } from './services/auth'
@@ -239,6 +240,7 @@ export default function App() {
       needsPrice,
       manualPrice: w.manualPrice,
       isIndex: needsPrice ? false : snap?.isIndex,
+      agorot: w.manualPrice == null && !needsPrice && quotedInAgorot(snap),
       priceIls: effectivePrice,
       changePct: snap?.changePct,
       series: snap?.series || [],

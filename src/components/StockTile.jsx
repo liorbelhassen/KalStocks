@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import PriceChart from './PriceChart'
 import { MiniField, tileView, fmt, fmt0, fmtTs } from './tileBits'
+import { AGOROT_LABEL, quotePrice } from '../../lib/quote'
 
 function Badge({ badge }) {
   if (!badge) return null
@@ -30,6 +31,11 @@ export default function StockTile({ stock, onRemove, onQuantity, onPrice, insigh
   const bg = up ? 'var(--up-bg)' : 'var(--down-bg)'
   const qty = Number(stock.quantity) || 0
   const value = hasPrice && qty > 0 ? qty * stock.priceIls : null
+  const chartSeries = stock.agorot ? view.series.map((p) => ({ ...p, v: quotePrice(p.v, true) })) : view.series
+  const priceText = !hasPrice ? '—'
+    : stock.isIndex ? fmt(stock.priceIls)
+      : stock.agorot ? `${fmt(quotePrice(stock.priceIls, true))} ${AGOROT_LABEL}`
+        : `${cur}${fmt(stock.priceIls)}`
 
   return (
     <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 10, padding: '11px 14px', display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
@@ -44,7 +50,7 @@ export default function StockTile({ stock, onRemove, onQuantity, onPrice, insigh
 
       {/* 2 · price (current, fixed) + period change */}
       <div style={{ width: 240, flexShrink: 0, textAlign: 'left', direction: 'ltr' }}>
-        <div style={{ fontSize: 21, fontWeight: 800 }}>{hasPrice ? (stock.isIndex ? fmt(stock.priceIls) : `${cur}${fmt(stock.priceIls)}`) : '—'}</div>
+        <div style={{ fontSize: 21, fontWeight: 800 }}>{priceText}</div>
         {hasChange && (
           <span style={{ display: 'inline-block', marginTop: 4, padding: '4px 14px', borderRadius: 14, background: bg, color, fontSize: 56, fontWeight: 800, lineHeight: 1.1 }}>
             {up ? '▲' : '▼'} {Math.abs(view.pct).toFixed(2)}%
@@ -54,7 +60,7 @@ export default function StockTile({ stock, onRemove, onQuantity, onPrice, insigh
 
       {/* 3 · period graph (price area + volume bars + time axis) */}
       <div style={{ width: 300, flexShrink: 0 }}>
-        <PriceChart series={view.series} period={tab} color={color} currency={cur} isIndex={stock.isIndex} height={112} />
+        <PriceChart series={chartSeries} period={tab} color={color} currency={stock.agorot ? '' : cur} isIndex={stock.isIndex} height={112} />
       </div>
 
       {/* 4 · sub-tabs + period insight (flexible) */}

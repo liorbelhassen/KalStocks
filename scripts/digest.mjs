@@ -33,7 +33,7 @@ async function main() {
 
   const all = items.map((w) => {
     const s = snaps[w.priceSymbol || w.symbol] || {}
-    return { symbol: w.symbol, nameHe: w.nameHe, kind: w.kind, priceIls: s.priceIls, changePct: s.changePct, isIndex: s.isIndex }
+    return { symbol: w.symbol, nameHe: w.nameHe, kind: w.kind, priceIls: s.priceIls, currency: s.currency, changePct: s.changePct, isIndex: s.isIndex }
   })
 
   // Today's significant movers, joined with their explanations.

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import PriceChart from './PriceChart'
 import { MiniField, tileView, fmt0, fmtTs } from './tileBits'
+import { quotePrice } from '../../lib/quote'
 
 const TABS = [['today', 'היום'], ['week', 'השבוע'], ['month', 'החודש']]
 
@@ -15,6 +16,7 @@ export default function FamilyCard({ title, rep, members, insightFontSize = 14, 
   if (syncKey !== seenSync) { setSeenSync(syncKey); setTab(syncTab) }
   const view = tileView(rep, tab)
   const cur = rep.currency || '₪'
+  const chartSeries = rep.agorot ? view.series.map((p) => ({ ...p, v: quotePrice(p.v, true) })) : view.series
   const hasChange = view.pct != null
   const up = (view.pct ?? 0) >= 0
   const color = up ? 'var(--up)' : 'var(--down)'
@@ -38,7 +40,7 @@ export default function FamilyCard({ title, rep, members, insightFontSize = 14, 
       </div>
 
       {/* shared chart */}
-      <PriceChart series={view.series} period={tab} color={color} currency={cur} isIndex={rep.isIndex} height={150} />
+      <PriceChart series={chartSeries} period={tab} color={color} currency={rep.agorot ? '' : cur} isIndex={rep.isIndex} height={150} />
 
       {/* shared review — once */}
       {view.insight && (

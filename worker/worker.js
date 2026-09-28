@@ -9,6 +9,7 @@ import { explainMove } from '../lib/explain.js'
 import { visionExtract } from '../lib/vision.js'
 import { askWithSearch } from '../lib/llm.js'
 import { classify } from '../lib/volatility.js'
+import { quotedInAgorot } from '../lib/quote.js'
 import { fetchHeadlines, buildNewsContext } from '../lib/telegram.js'
 import { buildPeriodsDoc, marketOf } from '../lib/periods.js'
 import { logEvent } from '../lib/validate.js'
@@ -170,7 +171,7 @@ async function morningJob(env) {
     .map((w) => {
       const ps = w.priceSymbol || w.symbol
       const a = assessments[ps] || {}
-      return { symbol: w.symbol, nameHe: w.nameHe, kind: w.kind, currency: (w.market || 'IL') === 'US' ? '$' : '₪', isIndex: snaps[ps]?.isIndex, priceIls: snaps[ps]?.priceIls, assessment: a.assessment || 'לא נמצאה הערכה.', sentiment: a.sentiment, confidence: a.confidence, sources: a.sources }
+      return { symbol: w.symbol, nameHe: w.nameHe, kind: w.kind, currency: (w.market || 'IL') === 'US' ? '$' : '₪', isIndex: snaps[ps]?.isIndex, agorot: quotedInAgorot(snaps[ps]), priceIls: snaps[ps]?.priceIls, assessment: a.assessment || 'לא נמצאה הערכה.', sentiment: a.sentiment, confidence: a.confidence, sources: a.sources }
     })
   const html = buildMorningHtml({ dateStr: ilDateHe(), items: emailItems, session: 'morning' })
   if (env.RESEND_API_KEY && env.DIGEST_TO) {
