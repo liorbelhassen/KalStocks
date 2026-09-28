@@ -1,0 +1,14 @@
+# Cloudflare Workers Builds runs wrangler from the repo root; this points it at the worker (not the
+# Vite site, which is on Firebase Hosting). Keep in sync with worker/wrangler.toml.
+name = "kalstocks-vision"
+main = "worker/worker.js"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[services]]
+binding = "JOBS"
+service = "kalstocks-vision"
+entrypoint = "Jobs"
+
+[triggers]
+crons = ["*/5 * * * *", "0 6 * * MON-FRI", "0 7 * * MON-FRI", "0 10 * * MON-FRI", "0 11 * * MON-FRI"]
