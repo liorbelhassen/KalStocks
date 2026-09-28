@@ -36,7 +36,7 @@ function marketOpen() {
 // service binding to this same Worker (`Jobs` entrypoint below), with its own subrequest budget.
 const CHUNK = 8
 const chunks = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n))
-const llmKeys = (env) => ({ geminiKey: env.GEMINI_API_KEY, geminiModel: env.GEMINI_MODEL, openaiKey: env.OPENAI_API_KEY, openaiModel: env.OPENAI_MODEL })
+const llmKeys = (env) => ({ geminiKey: env.GEMINI_API_KEY, geminiModel: env.GEMINI_MODEL, openaiKey: env.OPENAI_API_KEY, openaiModel: env.OPENAI_MODEL, openaiVerifyModel: env.OPENAI_VERIFY_MODEL })
 const hasLlm = (env) => !!(env.GEMINI_API_KEY || env.OPENAI_API_KEY)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -98,9 +98,9 @@ async function explainMover(env, { priceSymbol: ps, nameHe, isIndex, changePct, 
   const { token, pid } = await firestore(env)
   const market = marketOf(ps)
   const news = buildNewsContext(await fetchHeadlines(), { market, nameHe, symbol: ps })
-  const a = await assessOpen({ nameHe, symbol: isIndex ? '' : ps, market, date: dateStr, isIndex, session, changePct, newsContext: news }, llmKeys(env))
+  const a = await assessOpen({ nameHe, symbol: isIndex ? '' : ps, priceSymbol: ps, market, date: dateStr, isIndex, session, changePct, newsContext: news }, llmKeys(env))
   await patchDoc(token, pid, `briefs/${encodeURIComponent(`${ps}__${dateStr}`)}`, {
-    priceSymbol: ps, date: dateStr, session, band, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], at: Date.now(),
+    priceSymbol: ps, date: dateStr, session, band, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], verdict: a.verdict, at: Date.now(),
   })
 }
 
@@ -198,9 +198,9 @@ async function refreshSymbol(env, { g, session, dateStr }) {
   const news = buildNewsContext(await fetchHeadlines(), { market, nameHe: g.repName, symbol: g.priceSymbol }) // real headlines (anti-hallucination)
   let a = null
   try {
-    a = await assessOpen({ nameHe: g.repName, symbol: g.symbol, market, date: dateStr, isIndex: !!g.isIndex, session, changePct: session === 'midday' || g.useChange ? g.changePct : null, newsContext: news }, keys)
+    a = await assessOpen({ nameHe: g.repName, symbol: g.symbol, priceSymbol: g.priceSymbol, market, date: dateStr, isIndex: !!g.isIndex, session, changePct: session === 'midday' || g.useChange ? g.changePct : null, newsContext: news }, keys)
     await patchDoc(token, pid, `briefs/${encodeURIComponent(`${g.priceSymbol}__${dateStr}`)}`, {
-      priceSymbol: g.priceSymbol, date: dateStr, session, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], at: Date.now(),
+      priceSymbol: g.priceSymbol, date: dateStr, session, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], verdict: a.verdict, at: Date.now(),
     })
   } catch (e) {
     logEvent('warn', { stage: e.stage || 'brief', symbol: g.priceSymbol, period: 'day', session, error: e.message })

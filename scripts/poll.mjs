@@ -115,6 +115,7 @@ async function main() {
     geminiModel: process.env.GEMINI_MODEL,
     openaiKey: process.env.OPENAI_API_KEY,
     openaiModel: process.env.OPENAI_MODEL,
+    openaiVerifyModel: process.env.OPENAI_VERIFY_MODEL,
   }
   let geminiCalls = 0
   let explanationWrites = 0

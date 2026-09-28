@@ -29,6 +29,7 @@ async function main() {
     geminiModel: process.env.GEMINI_MODEL,
     openaiKey: process.env.OPENAI_API_KEY,
     openaiModel: process.env.OPENAI_MODEL,
+    openaiVerifyModel: process.env.OPENAI_VERIFY_MODEL,
   }
   if (!keys.geminiKey && !keys.openaiKey) {
     console.log('No LLM key set (GEMINI_API_KEY / OPENAI_API_KEY) — cannot build morning brief.')
@@ -72,7 +73,7 @@ async function main() {
       const market = marketOf(g.priceSymbol)
       const news = buildNewsContext(headlines, { market, nameHe: g.repName, symbol: g.priceSymbol })
       assessments[g.priceSymbol] = await assessOpen(
-        { nameHe: g.repName, symbol: g.symbol, market, date: dateStr, isIndex: !!g.isIndex, session, changePct: session === 'midday' ? snaps[g.priceSymbol]?.changePct : null, newsContext: news },
+        { nameHe: g.repName, symbol: g.symbol, priceSymbol: g.priceSymbol, market, date: dateStr, isIndex: !!g.isIndex, session, changePct: session === 'midday' ? snaps[g.priceSymbol]?.changePct : null, newsContext: news },
         keys,
       )
     } catch (e) {
