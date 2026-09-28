@@ -26,6 +26,7 @@ Framing: every explanation carries a confidence level, cites sources, and is lab
 - **AI (Phase 4):** Google **Gemini** (`gemini-2.5-flash`) with **Google Search grounding** — free tier,
   scans global news and explains in Hebrew with real sources. Chosen over paid Claude API. Key:
   `GEMINI_API_KEY` (local `.secrets.env`; add as GitHub secret for the cloud poller).
+- **News evidence (`lib/ilnews.js`):** every explanation/brief gets dated articles from Google News RSS — for Israeli instruments restricted to Globes, Calcalist and Bizportal plus a finance-scoped Hebrew Google News search. The drafter and the fact-checker (`lib/factcheck.js`) cite them as `#n`, and for IL instruments OpenAI web search is limited to those three domains. Yahoo only supplies prices/benchmark moves.
 - No TypeScript. Tests: `npm test` (Node built-in runner, `test/*.test.js`) cover period windows, news matching, prompt inputs and output validation — see `docs/ai-explanation-audit.md`.
 - **Auth to write Firestore from the poller:** a Firebase **service account key** — kept local as
   `serviceAccount.json` (gitignored) for one-off runs, and stored as the GitHub secret

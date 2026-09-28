@@ -82,7 +82,7 @@ test('computePeriod passes the exact epoch window to Yahoo and throws a staged e
   const r = await computePeriod('POLI.TA', 'week', { now: NOW, fetchSnapshot })
   assert.equal(r.changePct, 5)
   assert.equal(calls[0].interval, '30m')
-  assert.equal(calls[0].period1, startOfLocalDay('2026-08-31', 'Asia/Jerusalem') / 1000)
+  assert.equal(calls[0].period1, startOfLocalDay('2026-09-01', 'Asia/Jerusalem') / 1000) // baseline = close on 08-31, like Google's 5D/1M
   assert.equal(calls[0].period2, NOW / 1000)
   assert.equal(calls[0].range, undefined)
 
