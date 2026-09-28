@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   marketOf, periodWindow, periodChange, periodKey, computePeriod, isCurrentPeriodEntry, isPriceFresh, buildPeriodsDoc,
-  localDateISO, startOfLocalDay,
+  localDateISO, startOfLocalDay, isPeriodCurrent,
 } from '../lib/periods.js'
 
 // Mon 2026-09-07 08:00 UTC = 11:00 Israel (IDT, +3) = 04:00 New York (EDT, -4)
@@ -135,4 +135,13 @@ test('buildPeriodsDoc: reuses explanation for the same window, regenerates for a
   assert.ok(failed.doc.month.explanation)
   assert.equal(failed.errors.length, 1)
   assert.deepEqual([failed.errors[0].stage, failed.errors[0].symbol, failed.errors[0].period], ['llm', 'POLI.TA', 'week'])
+})
+
+test('isPeriodCurrent: window ending recently is current; old or unkeyed entries are stale', () => {
+  const now = Date.parse('2026-09-28T08:00:00Z')
+  assert.equal(isPeriodCurrent({ endDate: '2026-09-28' }, now), true)
+  assert.equal(isPeriodCurrent({ endDate: '2026-09-25' }, now), true)
+  assert.equal(isPeriodCurrent({ endDate: '2026-07-09' }, now), false)
+  assert.equal(isPeriodCurrent({ changePct: 3.1, explanation: 'x' }, now), false)
+  assert.equal(isPeriodCurrent(null, now), false)
 })

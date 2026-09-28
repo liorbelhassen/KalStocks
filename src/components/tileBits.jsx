@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { isPeriodCurrent } from '../../lib/periods'
 
 export const fmt = (n) => n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 export const fmt0 = (n) => n.toLocaleString('he-IL', { maximumFractionDigits: 0 })
@@ -21,21 +22,12 @@ export function MiniField({ label, value, onCommit, width = 46 }) {
   )
 }
 
-// A stored week/month explanation is only shown while its window is still "current": its end date
-// must be within the last few days (the job runs Mon–Fri, so a Friday text is fine on Saturday but a
-// text from last month is not). Entries written before the window key existed are treated as stale.
-const MAX_PERIOD_AGE_DAYS = 3
-export function isPeriodCurrent(p, now = Date.now()) {
-  if (!p?.endDate) return false
-  const end = Date.parse(`${p.endDate}T23:59:59Z`)
-  return Number.isFinite(end) && now - end <= MAX_PERIOD_AGE_DAYS * 86400000
-}
-
 // Explanation object for a period tab (with a header label). Falls back to a factual line.
 export function periodInsight(p, period, now = Date.now()) {
   if (!p) return null
   const label = period === 'week' ? '📅 השבוע' : '🗓️ החודש'
-  if (p.explanation && isPeriodCurrent(p, now)) return { text: p.explanation, confidence: p.confidence, sources: p.sources || [], label }
+  if (!isPeriodCurrent(p, now)) return { text: 'הנתונים לתקופה זו עדיין לא עודכנו — הם יופיעו אחרי העדכון הבא.', confidence: null, sources: [], label }
+  if (p.explanation) return { text: p.explanation, confidence: p.confidence, sources: p.sources || [], label }
   const dir = (p.changePct ?? 0) >= 0 ? 'עלה' : 'ירד'
   const periodHe = period === 'week' ? 'בשבוע האחרון' : 'בחודש האחרון'
   return { text: `הנייר ${dir} ${Math.abs(p.changePct ?? 0).toFixed(1)}% ${periodHe}.`, confidence: null, sources: [], label }
@@ -60,8 +52,12 @@ export function tileView(stock, tab) {
   const wk = stock.periods?.week
   const mo = stock.periods?.month
   const periodsTs = stock.periods?.updatedAt
-  if (tab === 'week') return { pct: wk?.changePct, series: wk?.series || [], insight: periodInsight(wk, 'week'), ts: periodsTs }
-  if (tab === 'month') return { pct: mo?.changePct, series: mo?.series || [], insight: periodInsight(mo, 'month'), ts: periodsTs }
+  if (tab === 'week' || tab === 'month') {
+    const p = tab === 'week' ? wk : mo
+    // An out-of-date window (e.g. last updated weeks ago) must not be presented as "this week/month".
+    if (!isPeriodCurrent(p)) return { pct: null, series: [], insight: periodInsight(p, tab), ts: null }
+    return { pct: p.changePct, series: p.series || [], insight: periodInsight(p, tab), ts: periodsTs }
+  }
   const todayInsight = stock.explanation ? { ...stock.explanation, label: todayLabel(stock.explanation) } : null
   return { pct: stock.changePct, series: stock.series || [], insight: todayInsight, ts: stock.explanation?.ts }
 }
