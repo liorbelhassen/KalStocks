@@ -7,6 +7,13 @@ compatibility_flags = ["nodejs_compat"]
 #  - every 5 min: price poll
 #  - 06:00/07:00 UTC → 09:00 Israel morning brief (+email); 10:00/11:00 UTC → 13:00 Israel midday
 #    refresh. The job gates by Israel hour (9 or 13), so the extra UTC slot covers DST.
+# Self-binding: the crons fan work out to the `Jobs` entrypoint so each chunk/symbol runs in its
+# own invocation (the free plan allows 50 subrequests per invocation).
+[[services]]
+binding = "JOBS"
+service = "kalstocks-vision"
+entrypoint = "Jobs"
+
 [triggers]
 crons = ["*/5 * * * *", "0 6 * * MON-FRI", "0 7 * * MON-FRI", "0 10 * * MON-FRI", "0 11 * * MON-FRI"]
 
@@ -16,3 +23,4 @@ crons = ["*/5 * * * *", "0 6 * * MON-FRI", "0 7 * * MON-FRI", "0 10 * * MON-FRI"
 #          wrangler secret put SERVICE_ACCOUNT < ../serviceAccount.json
 #          wrangler secret put RESEND_API_KEY
 #          wrangler secret put DIGEST_TO
+#          wrangler secret put ADMIN_KEY        # for the manual {"action":"refresh"} endpoint

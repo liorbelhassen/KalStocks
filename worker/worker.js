@@ -3,12 +3,13 @@
 //  - quote:  fetch a live Yahoo snapshot for a symbol (so a manually-added stock loads instantly,
 //            without waiting for the scheduled poller — no Gemini involved).
 import { fetchSnapshot, fetchSnapshots } from '../lib/yahoo.js'
-import { getAccessToken, getDoc, listDocs, patchDoc } from './firestore.js'
+import { WorkerEntrypoint } from 'cloudflare:workers'
+import { commitDocs, getAccessToken, getDoc, getDocs, listDocs, patchDoc } from './firestore.js'
 import { assessOpen, buildMorningHtml } from '../lib/morning.js'
 import { explainMove } from '../lib/explain.js'
 import { visionExtract } from '../lib/vision.js'
 import { askWithSearch } from '../lib/llm.js'
-import { classify } from '../lib/volatility.js'
+import { classify, triggerBand } from '../lib/volatility.js'
 import { quotedInAgorot } from '../lib/quote.js'
 import { fetchHeadlines, buildNewsContext } from '../lib/telegram.js'
 import { buildPeriodsDoc, marketOf } from '../lib/periods.js'
@@ -29,70 +30,78 @@ function marketOpen() {
   return taseOpen || usOpen
 }
 
-// Reliable 5-min price poll (Cloudflare cron). Writes snapshots to Firestore via REST.
+// The Workers free plan allows 50 subrequests (fetches) per invocation, far fewer than one pass
+// over the whole watchlist needs (Yahoo + Firestore + news + LLM per symbol). So each cron only
+// dispatches: the work runs in small chunks / per symbol, each in its own invocation via the JOBS
+// service binding to this same Worker (`Jobs` entrypoint below), with its own subrequest budget.
+const CHUNK = 8
+const chunks = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n))
+const llmKeys = (env) => ({ geminiKey: env.GEMINI_API_KEY, geminiModel: env.GEMINI_MODEL, openaiKey: env.OPENAI_API_KEY, openaiModel: env.OPENAI_MODEL })
+const hasLlm = (env) => !!(env.GEMINI_API_KEY || env.OPENAI_API_KEY)
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+async function firestore(env) {
+  const sa = JSON.parse(env.SERVICE_ACCOUNT)
+  return { token: await getAccessToken(sa), pid: sa.project_id }
+}
+
+// Reliable 5-min price poll (Cloudflare cron): dispatches price chunks.
 async function pollPrices(env) {
   if (!env.SERVICE_ACCOUNT) return
   if (!marketOpen()) return
-  const sa = JSON.parse(env.SERVICE_ACCOUNT)
-  const token = await getAccessToken(sa)
-  const wl = await listDocs(token, sa.project_id, 'watchlist')
-  const symbols = new Set(['TA35.TA'])
-  wl.forEach((w) => {
-    if (w.kind === 'other') return // manual-price stocks aren't on Yahoo
-    const p = w.priceSymbol || w.symbol
-    if (p) symbols.add(p)
-  })
-  const snaps = await fetchSnapshots([...symbols])
-  const byPrice = {}
-  for (const snap of snaps) {
-    if (snap.error) continue
-    byPrice[snap.symbol] = snap
-    try {
-      await patchDoc(token, sa.project_id, `snapshots/${encodeURIComponent(snap.symbol)}`, {
-        ...snap,
-        updatedAt: Date.now(),
-      })
-    } catch (e) {
-      logEvent('error', { stage: 'store-snapshot', symbol: snap.symbol, error: String(e) })
-    }
-  }
-  for (const snap of snaps) if (snap.error) logEvent('warn', { stage: 'price', symbol: snap.symbol, error: snap.error })
-
-  // Volatility trigger: when a stock crosses its per-stock threshold, refresh its insight with a
-  // fresh, direction-aware explanation of the move. Deduped by 'band' so the same level isn't
-  // re-explained every 5 minutes.
-  if (!env.GEMINI_API_KEY && !env.OPENAI_API_KEY) return
-  const dateStr = ilDateISO()
-  const priorBand = {}
-  ;(await listDocs(token, sa.project_id, 'briefs')).forEach((b) => { if (b.date === dateStr) priorBand[b.priceSymbol] = b.band || 0 })
-  const keys = { geminiKey: env.GEMINI_API_KEY, geminiModel: env.GEMINI_MODEL, openaiKey: env.OPENAI_API_KEY, openaiModel: env.OPENAI_MODEL }
-  const session = Math.floor(minutesInZone('Asia/Jerusalem').min / 60) < 12 ? 'morning' : 'midday'
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-  const done = new Set()
-  let headlines = null // fetched lazily on the first significant mover
+  const { token, pid } = await firestore(env)
+  const wl = await listDocs(token, pid, 'watchlist')
+  const items = new Map()
   for (const w of wl) {
-    if (w.kind === 'other') continue
+    if (w.kind === 'other') continue // manual-price stocks aren't on Yahoo
     const ps = w.priceSymbol || w.symbol
-    if (done.has(ps)) continue
-    const snap = byPrice[ps]
-    if (!snap) continue
-    const c = classify(snap, w.thresholdPct || 0.5)
-    if (!c.significant || (priorBand[ps] || 0) >= c.band) continue // not significant, or level already explained
-    done.add(ps)
+    if (ps && !items.has(ps)) items.set(ps, { priceSymbol: ps, nameHe: w.nameHe, thresholdPct: w.thresholdPct || 0.5 })
+  }
+  if (!items.has('TA35.TA')) items.set('TA35.TA', { priceSymbol: 'TA35.TA', snapshotOnly: true }) // ETF proxy price
+  const dateStr = ilDateISO()
+  const session = Math.floor(minutesInZone('Asia/Jerusalem').min / 60) < 12 ? 'morning' : 'midday'
+  await Promise.all(chunks([...items.values()], CHUNK).map((c) =>
+    env.JOBS.pollChunk({ items: c, dateStr, session }).catch((e) => logEvent('error', { stage: 'poll-chunk', symbols: c.map((i) => i.priceSymbol), error: String(e) })),
+  ))
+}
+
+// One chunk: fetch prices, write snapshots in one commit, then explain new significant moves.
+// Volatility trigger: when a stock crosses its per-stock threshold, refresh its insight with a
+// fresh, direction-aware explanation. Deduped by trigger band so a level isn't re-explained every 5 min.
+async function pollChunk(env, { items, dateStr, session }) {
+  const { token, pid } = await firestore(env)
+  const snaps = await fetchSnapshots(items.map((i) => i.priceSymbol))
+  const ok = snaps.filter((s) => !s.error)
+  for (const s of snaps) if (s.error) logEvent('warn', { stage: 'price', symbol: s.symbol, error: s.error })
+  const now = Date.now()
+  await commitDocs(token, pid, ok.map((s) => ({ path: `snapshots/${encodeURIComponent(s.symbol)}`, obj: { ...s, updatedAt: now } })))
+  if (!hasLlm(env)) return
+
+  const bySym = Object.fromEntries(ok.map((s) => [s.symbol, s]))
+  const briefPath = (ps) => `briefs/${encodeURIComponent(`${ps}__${dateStr}`)}`
+  const prior = await getDocs(token, pid, ok.map((s) => briefPath(s.symbol)))
+  for (const it of items) {
+    const snap = bySym[it.priceSymbol]
+    if (!snap || it.snapshotOnly) continue
+    const c = classify(snap, it.thresholdPct || 0.5)
+    const band = triggerBand(c)
+    if (!c.significant || (prior[briefPath(it.priceSymbol)]?.band || 0) >= band) continue // not significant, or level already explained
     try {
-      if (headlines === null) headlines = await fetchHeadlines() // fetch once, only if there's a mover to explain
-      const isIndex = !!snap.isIndex
-      const market = marketOf(ps)
-      const news = buildNewsContext(headlines, { market, nameHe: w.nameHe, symbol: ps })
-      const a = await assessOpen({ nameHe: w.nameHe, symbol: isIndex ? '' : ps, market, date: dateStr, isIndex, session, changePct: snap.changePct, newsContext: news }, keys)
-      await patchDoc(token, sa.project_id, `briefs/${encodeURIComponent(`${ps}__${dateStr}`)}`, {
-        priceSymbol: ps, date: dateStr, session, band: c.band, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], at: Date.now(),
-      })
-      await sleep(2000)
+      await env.JOBS.explainMover({ priceSymbol: it.priceSymbol, nameHe: it.nameHe, isIndex: !!snap.isIndex, changePct: snap.changePct, band, dateStr, session })
     } catch (e) {
-      logEvent('warn', { stage: e.stage || 'brief', symbol: ps, period: 'day', changePct: snap.changePct, error: e.message })
+      logEvent('warn', { stage: e.stage || 'brief', symbol: it.priceSymbol, period: 'day', changePct: snap.changePct, error: String(e) })
     }
   }
+}
+
+async function explainMover(env, { priceSymbol: ps, nameHe, isIndex, changePct, band, dateStr, session }) {
+  const { token, pid } = await firestore(env)
+  const market = marketOf(ps)
+  const news = buildNewsContext(await fetchHeadlines(), { market, nameHe, symbol: ps })
+  const a = await assessOpen({ nameHe, symbol: isIndex ? '' : ps, market, date: dateStr, isIndex, session, changePct, newsContext: news }, llmKeys(env))
+  await patchDoc(token, pid, `briefs/${encodeURIComponent(`${ps}__${dateStr}`)}`, {
+    priceSymbol: ps, date: dateStr, session, band, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], at: Date.now(),
+  })
 }
 
 const ilDateISO = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date())
@@ -100,72 +109,53 @@ const ilDateHe = () =>
   new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date())
 
 // Morning brief — reliable 09:00 Israel (Cloudflare cron fires on time). Sends the email +
-// writes today's briefs + week/month period data & explanations. Reuses the shared libs.
-async function morningJob(env) {
-  if (!env.SERVICE_ACCOUNT || (!env.GEMINI_API_KEY && !env.OPENAI_API_KEY)) return
+// writes today's briefs + week/month period data & explanations (per symbol, see `refreshSymbol`).
+// Midday (13:00) refreshes the briefs and the week/month numbers — no email. `force` lets the
+// admin `refresh` action run a session outside its slot.
+async function morningJob(env, { force = null, email = true, only = null } = {}) {
+  if (!env.SERVICE_ACCOUNT || !hasLlm(env)) return { skipped: true }
   const ilHour = Math.floor(minutesInZone('Asia/Jerusalem').min / 60)
-  const session = ilHour === 9 ? 'morning' : ilHour === 13 ? 'midday' : null
-  if (!session) return // only the 09:xx (morning brief + email) or 13:xx (midday refresh) slots — DST-safe
+  const session = force || (ilHour === 9 ? 'morning' : ilHour === 13 ? 'midday' : null)
+  if (!session) return { skipped: true } // only the 09:xx or 13:xx slots — DST-safe
 
-  // Gemini (free) first, OpenAI (paid) fallback — keeps assessments reliable past Gemini's quota.
-  const keys = { geminiKey: env.GEMINI_API_KEY, geminiModel: env.GEMINI_MODEL, openaiKey: env.OPENAI_API_KEY, openaiModel: env.OPENAI_MODEL }
-  const headlines = await fetchHeadlines() // real-time headlines to ground the insights (anti-hallucination)
-
-  const sa = JSON.parse(env.SERVICE_ACCOUNT)
-  const token = await getAccessToken(sa)
-  const pid = sa.project_id
+  const { token, pid } = await firestore(env)
   const dateStr = ilDateISO()
-
   const items = await listDocs(token, pid, 'watchlist')
   const snaps = {}
   ;(await listDocs(token, pid, 'snapshots')).forEach((s) => {
     if (s.symbol) snaps[s.symbol] = s
   })
 
-  // Digest goes only to DIGEST_TO for now → email only that user's own portfolio.
-  // Shared AI/price data below is still computed over every user's symbols (the union).
-  const users = await listDocs(token, pid, 'users')
-  const digestUid = users.find((u) => u.email && u.email === env.DIGEST_TO)?.uid || null
-  const emailSource = digestUid ? items.filter((w) => w.userId === digestUid) : items
-
   // 'other' (manual-price) stocks still get a news-based assessment by name — just no periods.
   const groups = new Map()
   for (const w of items) {
     const ps = w.priceSymbol || w.symbol
-    if (!ps) continue
+    if (!ps || (only && !only.includes(ps))) continue
     const isOther = w.kind === 'other'
-    if (!groups.has(ps)) groups.set(ps, { priceSymbol: ps, repName: w.nameHe, isIndex: snaps[ps]?.isIndex, isOther, symbol: isOther ? '' : ps })
+    if (!groups.has(ps)) groups.set(ps, { priceSymbol: ps, repName: w.nameHe, isIndex: !!snaps[ps]?.isIndex, isOther, symbol: isOther ? '' : ps, changePct: snaps[ps]?.changePct ?? null })
     // Several ETFs share one price symbol (e.g. TA35.TA). Describe the group by the instrument that
     // IS the price symbol (the index), never by whichever ETF happened to be listed last.
     if (w.symbol === ps) groups.get(ps).repName = w.nameHe
   }
 
-  const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-  const assessments = {}
-  for (const g of groups.values()) {
-    try {
-      const market = marketOf(g.priceSymbol)
-      const news = buildNewsContext(headlines, { market, nameHe: g.repName, symbol: g.priceSymbol })
-      assessments[g.priceSymbol] = await assessOpen({ nameHe: g.repName, symbol: g.symbol, market, date: dateStr, isIndex: !!g.isIndex, session, changePct: session === 'midday' ? snaps[g.priceSymbol]?.changePct : null, newsContext: news }, keys)
-    } catch (e) {
-      logEvent('warn', { stage: e.stage || 'brief', symbol: g.priceSymbol, period: 'day', session, error: e.message })
-    }
-    await sleep(4500) // pace to stay under Gemini's ~20 requests/minute free limit
-  }
-  for (const [ps, a] of Object.entries(assessments)) {
-    await patchDoc(token, pid, `briefs/${encodeURIComponent(`${ps}__${dateStr}`)}`, {
-      priceSymbol: ps, date: dateStr, session, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], at: Date.now(),
-    })
+  const results = await Promise.all(chunks([...groups.values()], CHUNK).map((c) =>
+    env.JOBS.refreshChunk({ groups: c, session, dateStr }).catch((e) => {
+      logEvent('error', { stage: 'refresh-chunk', symbols: c.map((g) => g.priceSymbol), error: String(e) })
+      return {}
+    }),
+  ))
+  const assessments = Object.assign({}, ...results)
+  const summary = { session, dateStr, symbols: groups.size, assessed: Object.keys(assessments).length }
+
+  if (session !== 'morning' || !email) {
+    console.log(`${session} refresh done`, JSON.stringify(summary))
+    return summary
   }
 
-  // Midday refreshes the dashboard insights and the week/month numbers (explanations are reused via
-  // their period key, so no extra LLM calls) — no email.
-  if (session !== 'morning') {
-    await refreshPeriods(token, pid, groups, keys, sleep)
-    console.log('midday refresh done for', dateStr)
-    return
-  }
-
+  // Digest goes only to DIGEST_TO for now → email only that user's own portfolio.
+  const users = await listDocs(token, pid, 'users')
+  const digestUid = users.find((u) => u.email && u.email === env.DIGEST_TO)?.uid || null
+  const emailSource = digestUid ? items.filter((w) => w.userId === digestUid) : items
   const emailItems = emailSource
     .filter((w) => w.kind !== 'other')
     .map((w) => {
@@ -181,52 +171,67 @@ async function morningJob(env) {
       body: JSON.stringify({ from: env.DIGEST_FROM || 'StocksInsights <onboarding@resend.dev>', to: env.DIGEST_TO, subject: `☀️ סקירת בוקר StocksInsights · ${dateStr}`, html }),
     })
   }
-
-  await refreshPeriods(token, pid, groups, keys, sleep)
-  console.log('morning job done for', dateStr)
+  console.log('morning job done', JSON.stringify(summary))
+  return summary
 }
 
-// Week/month period data + explanations for every price symbol. One symbol's failure never skips
-// the rest; each failure is logged with {stage, symbol, period}. Explanations are keyed by the exact
-// window (symbol + period + start/end dates), so a stale text is never re-served for a new window.
-async function refreshPeriods(token, pid, groups, keys, sleep) {
-  for (const [ps, g] of groups.entries()) {
-    if (g.isOther) continue // no Yahoo price series for manual-price stocks
+// Symbols of one chunk, one invocation each, paced for Gemini's ~20 requests/minute free limit.
+async function refreshChunk(env, { groups, session, dateStr }) {
+  const out = {}
+  for (const g of groups) {
     try {
-      const existing = await getDoc(token, pid, `periods/${encodeURIComponent(ps)}`).catch(() => null)
-      const { doc } = await buildPeriodsDoc({ symbol: ps, nameHe: g.repName || ps, keys, existing, fetchSnapshot, explainMove, sleep: () => sleep(4500) })
-      await patchDoc(token, pid, `periods/${encodeURIComponent(ps)}`, doc)
+      const a = await env.JOBS.refreshSymbol({ g, session, dateStr })
+      if (a) out[g.priceSymbol] = a
     } catch (e) {
-      logEvent('error', { stage: 'store-periods', symbol: ps, error: String(e) })
+      logEvent('error', { stage: 'refresh-symbol', symbol: g.priceSymbol, error: String(e) })
     }
+    await sleep(4500)
+  }
+  return out
+}
+
+// Today's brief + week/month periods for one instrument. Returns the assessment (for the email).
+async function refreshSymbol(env, { g, session, dateStr }) {
+  const { token, pid } = await firestore(env)
+  const keys = llmKeys(env)
+  const market = marketOf(g.priceSymbol)
+  const news = buildNewsContext(await fetchHeadlines(), { market, nameHe: g.repName, symbol: g.priceSymbol }) // real headlines (anti-hallucination)
+  let a = null
+  try {
+    a = await assessOpen({ nameHe: g.repName, symbol: g.symbol, market, date: dateStr, isIndex: !!g.isIndex, session, changePct: session === 'midday' || g.useChange ? g.changePct : null, newsContext: news }, keys)
+    await patchDoc(token, pid, `briefs/${encodeURIComponent(`${g.priceSymbol}__${dateStr}`)}`, {
+      priceSymbol: g.priceSymbol, date: dateStr, session, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], at: Date.now(),
+    })
+  } catch (e) {
+    logEvent('warn', { stage: e.stage || 'brief', symbol: g.priceSymbol, period: 'day', session, error: e.message })
+  }
+  if (!g.isOther) await refreshPeriods(token, pid, g, keys) // no Yahoo series for manual-price stocks
+  return a
+}
+
+// Week/month period data + explanations. Explanations are keyed by the exact window (symbol +
+// period + start/end dates), so a stale text is never re-served for a new window.
+async function refreshPeriods(token, pid, g, keys) {
+  const ps = g.priceSymbol
+  try {
+    const existing = await getDoc(token, pid, `periods/${encodeURIComponent(ps)}`).catch(() => null)
+    const { doc } = await buildPeriodsDoc({ symbol: ps, nameHe: g.repName || ps, keys, existing, fetchSnapshot, explainMove, sleep: () => sleep(4500) })
+    await patchDoc(token, pid, `periods/${encodeURIComponent(ps)}`, doc)
+  } catch (e) {
+    logEvent('error', { stage: 'store-periods', symbol: ps, error: String(e) })
   }
 }
 
 // On-demand generation for a single instrument (when a user just added it) — today's brief +
 // week/month periods, so the reviews appear within seconds instead of waiting for the morning cron.
 async function primeSymbol(env, symbol, nameHe, isIndex) {
-  const sa = JSON.parse(env.SERVICE_ACCOUNT)
-  const token = await getAccessToken(sa)
-  const pid = sa.project_id
   const dateStr = ilDateISO()
   const session = Math.floor(minutesInZone('Asia/Jerusalem').min / 60) < 12 ? 'morning' : 'midday'
-  const keys = { geminiKey: env.GEMINI_API_KEY, geminiModel: env.GEMINI_MODEL, openaiKey: env.OPENAI_API_KEY, openaiModel: env.OPENAI_MODEL }
-  const news = buildNewsContext(await fetchHeadlines(), { market: marketOf(symbol), nameHe, symbol }) // ground the new stock's insight in real current headlines
-
   // Current-day change so the just-added stock's insight matches its actual direction.
   let changePct = null
   if (!symbol.startsWith('X-')) { try { changePct = (await fetchSnapshot(symbol)).changePct } catch { /* ignore */ } }
-
-  try {
-    const a = await assessOpen({ nameHe, symbol: isIndex ? '' : symbol, market: marketOf(symbol), date: dateStr, isIndex, session, changePct, newsContext: news }, keys)
-    await patchDoc(token, pid, `briefs/${encodeURIComponent(`${symbol}__${dateStr}`)}`, {
-      priceSymbol: symbol, date: dateStr, session, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], at: Date.now(),
-    })
-  } catch (e) { logEvent('warn', { stage: e.stage || 'brief', symbol, period: 'day', error: e.message }) }
-
-  if (symbol.startsWith('X-')) return // manual-price stocks have no Yahoo series
-  const groups = new Map([[symbol, { priceSymbol: symbol, repName: nameHe, isOther: false }]])
-  await refreshPeriods(token, pid, groups, keys, (ms) => new Promise((r) => setTimeout(r, ms)))
+  const isOther = symbol.startsWith('X-')
+  await refreshSymbol(env, { g: { priceSymbol: symbol, repName: nameHe, isIndex, isOther, symbol: isIndex ? '' : symbol, changePct, useChange: true }, session, dateStr })
 }
 
 function cors(origin) {
@@ -253,6 +258,13 @@ export default {
     if (request.method !== 'POST') return json({ error: 'POST only' }, 405, origin)
     try {
       const body = await request.json()
+
+      // Admin: run the morning/midday refresh now (briefs + week/month periods), without email.
+      // Runs in the request itself (a waitUntil task would be cut off after 30 s).
+      if (body.action === 'refresh') {
+        if (!env.ADMIN_KEY || request.headers.get('X-Admin-Key') !== env.ADMIN_KEY) return json({ error: 'forbidden' }, 403, origin)
+        return json(await morningJob(env, { force: body.session === 'midday' ? 'midday' : 'morning', email: false, only: Array.isArray(body.symbols) ? body.symbols : null }), 200, origin)
+      }
 
       // Action: generate today/week/month reviews for a just-added instrument, in the background,
       // so they appear within seconds (no waiting for the morning cron).
@@ -370,4 +382,13 @@ export default {
       ctx.waitUntil(morningJob(env).catch((e) => console.log('cron morning error:', String(e))))
     }
   },
+}
+
+// Internal jobs, reached only through the JOBS service binding (RPC — not exposed over HTTP).
+// Each call is a separate invocation with its own subrequest budget.
+export class Jobs extends WorkerEntrypoint {
+  pollChunk(args) { return pollChunk(this.env, args) }
+  explainMover(args) { return explainMover(this.env, args) }
+  refreshChunk(args) { return refreshChunk(this.env, args) }
+  refreshSymbol(args) { return refreshSymbol(this.env, args) }
 }
