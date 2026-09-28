@@ -12,7 +12,8 @@
     "poll": "node scripts/poll.mjs",
     "digest": "node scripts/digest.mjs",
     "morning": "node scripts/morning.mjs",
-    "usage": "node scripts/usage.mjs"
+    "usage": "node scripts/usage.mjs",
+    "migrate:thresholds": "node scripts/migrate-thresholds.mjs"
   },
   "dependencies": {
     "firebase": "^12.11.0",

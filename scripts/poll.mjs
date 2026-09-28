@@ -78,7 +78,7 @@ async function main() {
   for (const it of items) {
     const snap = byPrice[it.priceSymbol || it.symbol]
     if (!snap) continue
-    const thr = it.thresholdPct || 3
+    const thr = it.thresholdPct || 0.5
     const c = classify(snap, thr)
     if (!c.significant) continue
 
