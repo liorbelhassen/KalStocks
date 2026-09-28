@@ -42,3 +42,9 @@ test('explainMove: when every AI path fails, a significant move still gets the m
   assert.match(r.explanation, /^דאו ג'ונס ירד 3\.63% בחודש האחרון\./)
   assert.deepEqual(r.sources, ['Yahoo Finance'])
 })
+
+test('measuredAnalysis: Hebrew prepositions attach correctly to Latin and definite labels', () => {
+  const t = (ref) => measuredAnalysis({ subject: 'מדד ת"א 35', isIndex: true, changePct: -0.8, facts: [ref], diagnosis: { kind: 'market-wide', ref } })
+  assert.ok(t({ label: 'S&P 500', changePct: -0.7 }).includes('בדומה ל-S&P 500'))
+  assert.ok(t({ label: 'החוזים העתידיים בוול סטריט', changePct: -1 }).includes('בדומה לחוזים העתידיים'))
+})

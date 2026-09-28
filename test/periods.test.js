@@ -146,3 +146,13 @@ test('isPeriodCurrent: window ending recently is current; old or unkeyed entries
   assert.equal(isPeriodCurrent({ changePct: 3.1, explanation: 'x' }, now), false)
   assert.equal(isPeriodCurrent(null, now), false)
 })
+
+test('isCurrentPeriodEntry: a text written for a different move or leaking checker commentary is not reused', () => {
+  const w = { key: 'K' }
+  const e = { key: 'K', explanation: 'המדד ירד 1.10% בשבוע האחרון.', verdict: 'נתונים בלבד', explainedPct: -1.1 }
+  assert.equal(isCurrentPeriodEntry(e, w, -1.2), true)
+  assert.equal(isCurrentPeriodEntry(e, w, 1.17), false)
+  assert.equal(isCurrentPeriodEntry({ ...e, explainedPct: undefined }, w, -1.1), false)
+  assert.equal(isCurrentPeriodEntry({ ...e, explanation: 'לא אומת בסיס לדוחות מאכזבים' }, w), false)
+})
+
