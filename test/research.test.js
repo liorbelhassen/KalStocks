@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { sectorBenchmark, parseSecAtom, parseFindings, researchQueries, gatherEvidence, checkerDomains, yahooNewsArticles, researchInstructions } from '../lib/research.js'
+import { sectorBenchmark, parseSecAtom, parseFindings, researchQueries, gatherEvidence, checkerDomains, yahooNewsArticles, researchInstructions, cleanHebrewName, hebrewName } from '../lib/research.js'
 
 const NOW = Date.parse('2026-09-28T14:00:00Z')
 
@@ -84,4 +84,33 @@ test('researchInstructions / checkerDomains: official sources per market', () =>
   const d = checkerDomains('IL', [{ host: 'ice.co.il' }])
   assert.ok(d.includes('globes.co.il') && d.includes('maya.tase.co.il') && d.includes('ice.co.il') && d.length <= 20)
   assert.equal(checkerDomains('US'), null)
+})
+
+test('sectorBenchmark: airlines get a news-only sector in Israel and JETS in the US', () => {
+  const il = sectorBenchmark({ market: 'IL', sector: 'Industrials', industry: 'Airlines' })
+  assert.equal(il.symbol, null)
+  assert.ok(il.re.test('מניות התעופה זינקו'))
+  assert.equal(sectorBenchmark({ market: 'US', sector: 'Industrials', industry: 'Airlines' }).symbol, 'JETS')
+})
+
+test('researchInstructions: asks for incidents at the company or its competitors', () => {
+  for (const market of ['IL', 'US']) assert.ok(researchInstructions({ market, when: 'היום' }).includes('תקריות ביטחוניות'))
+})
+
+test('cleanHebrewName / hebrewName: one Hebrew press name, or null', async () => {
+  assert.equal(cleanHebrewName('"אל על"'), 'אל על')
+  assert.equal(cleanHebrewName('מניית אל על.\nהסבר נוסף'), 'אל על')
+  assert.equal(cleanHebrewName('**בזק** ([globes.co.il](https://www.globes.co.il/x))'), 'בזק')
+  assert.equal(cleanHebrewName('El Al Israel Airlines'), null)
+  assert.equal(cleanHebrewName('השם העברי של החברה הוא אל על נתיבי אויר לישראל בעמ'), null)
+  const ask = async (prompt) => ({ text: prompt.includes('ELAL.TA') && prompt.includes('El Al Israel Airlines') ? 'אל על' : '' })
+  assert.equal(await hebrewName({ symbol: 'ELAL.TA', englishName: 'El Al Israel Airlines' }, {}, { ask }), 'אל על')
+})
+
+test('parseFindings: a URL followed by a backtick or quote keeps only the URL', () => {
+  const text = `ממצאים:
+- 2026-09-28 | אל על זינקה אחרי התקרית בטיסת פליי דובאי | https://passportnews.co.il/article/210323\`
+ביטחון: בינונית`
+  const got = parseFindings(text, { urls: ['https://passportnews.co.il/article/210323'], now: NOW })
+  assert.equal(got[0].url, 'https://passportnews.co.il/article/210323')
 })

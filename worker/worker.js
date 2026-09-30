@@ -15,6 +15,7 @@ import { fetchHeadlines, buildNewsContext } from '../lib/telegram.js'
 import { buildPeriodsDoc, marketOf, marketTz } from '../lib/periods.js'
 import { logEvent } from '../lib/validate.js'
 import { measuredAnalysis } from '../lib/analysis.js'
+import { fetchProfile, hebrewName } from '../lib/research.js'
 
 const ALLOWED = ['https://kalstocks1.web.app', 'http://localhost:5175', 'http://localhost:5173']
 
@@ -110,9 +111,27 @@ const measuredBrief = ({ nameHe, isIndex, changePct, market }) => {
 }
 const headlines = () => fetchHeadlines().catch(() => [])
 
-async function explainMover(env, { priceSymbol: ps, nameHe, isIndex, changePct, band, dateStr, session }) {
+// TASE securities added under Yahoo's English name ("EL AL ISRAEL AIRLI") are researched and
+// described by their Hebrew press name ("אל על"), resolved once and cached in `names/{symbol}`.
+async function researchName(env, token, pid, ps, nameHe) {
+  if (marketOf(ps) !== 'IL' || ps.startsWith('X-') || /[\u0590-\u05FF]/.test(nameHe || '') || !hasLlm(env)) return nameHe
+  const path = `names/${encodeURIComponent(ps)}`
+  const cached = await getDoc(token, pid, path).catch(() => null)
+  if (cached?.nameHe) return cached.nameHe
+  const englishName = (await fetchProfile(ps).catch(() => null))?.name || nameHe
+  const he = await hebrewName({ symbol: ps, englishName }, llmKeys(env)).catch((e) => {
+    logEvent('warn', { stage: 'hebrew-name', symbol: ps, error: String(e) })
+    return null
+  })
+  if (!he) return nameHe
+  await patchDoc(token, pid, path, { symbol: ps, nameHe: he, englishName, at: Date.now() }).catch(() => {})
+  return he
+}
+
+async function explainMover(env, { priceSymbol: ps, nameHe: savedName, isIndex, changePct, band, dateStr, session }) {
   const { token, pid } = await firestore(env)
   const market = marketOf(ps)
+  const nameHe = await researchName(env, token, pid, ps, savedName)
   let a
   try {
     const news = buildNewsContext(await headlines(), { market, nameHe, symbol: ps })
@@ -219,7 +238,9 @@ async function refreshChunk(env, { groups, session, dateStr }) {
 
 // Today's brief for one instrument, with its week and month periods in parallel invocations (each
 // its own subrequest budget). Returns the assessment (for the email).
-async function refreshSymbol(env, { g, session, dateStr }) {
+async function refreshSymbol(env, { g: saved, session, dateStr }) {
+  const { token, pid } = await firestore(env)
+  const g = { ...saved, repName: await researchName(env, token, pid, saved.priceSymbol, saved.repName) }
   const periods = g.isOther ? [] : ['week', 'month'].map((period) => // no Yahoo series for manual-price stocks
     env.JOBS.refreshPeriod({ g, period }).catch((e) => logEvent('error', { stage: 'store-periods', symbol: g.priceSymbol, period, error: String(e) })))
   const [a] = await Promise.all([refreshBrief(env, { g, session, dateStr }), ...periods])
