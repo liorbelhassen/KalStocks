@@ -45,3 +45,14 @@ test('briefOutdated: flipped or much larger move re-explains; legacy trigger bri
   assert.equal(briefOutdated({ session: 'morning' }, 0.9), false)
   assert.equal(briefOutdated(null, 0.9), false)
 })
+
+test('keepCheckedBrief: a numbers-only retry never replaces a checked text for the same move', async () => {
+  const { keepCheckedBrief } = await import('../lib/volatility.js')
+  const checked = { assessment: 'דיסקונט ירדה יחד עם מדד הבנקים…', verdict: 'תוקן', explainedPct: -1.34 }
+  const fb = { assessment: 'מניית בנק דיסקונט ירדה…', verdict: 'נתונים בלבד' }
+  assert.equal(keepCheckedBrief(checked, fb, -1.3), true)
+  assert.equal(keepCheckedBrief(checked, fb, 0.8), false)
+  assert.equal(keepCheckedBrief(checked, { ...fb, verdict: 'תוקן' }, -1.3), false)
+  assert.equal(keepCheckedBrief({ ...checked, verdict: 'נתונים בלבד' }, fb, -1.3), false)
+  assert.equal(keepCheckedBrief(null, fb, -1.3), false)
+})

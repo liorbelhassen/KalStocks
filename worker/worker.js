@@ -9,7 +9,7 @@ import { assessOpen, buildMorningHtml } from '../lib/morning.js'
 import { explainMove } from '../lib/explain.js'
 import { visionExtract } from '../lib/vision.js'
 import { askWithSearch } from '../lib/llm.js'
-import { classify, triggerBand, briefOutdated } from '../lib/volatility.js'
+import { classify, triggerBand, briefOutdated, keepCheckedBrief } from '../lib/volatility.js'
 import { quotedInAgorot } from '../lib/quote.js'
 import { fetchHeadlines, buildNewsContext } from '../lib/telegram.js'
 import { buildPeriodsDoc, marketOf, marketTz } from '../lib/periods.js'
@@ -122,7 +122,12 @@ async function explainMover(env, { priceSymbol: ps, nameHe, isIndex, changePct, 
     if (!a) throw e
     logEvent('warn', { stage: e.stage || 'brief', symbol: ps, period: 'day', changePct, fallback: 'measured', error: String(e) })
   }
-  await patchDoc(token, pid, `briefs/${encodeURIComponent(`${ps}__${dateStr}`)}`, {
+  const path = `briefs/${encodeURIComponent(`${ps}__${dateStr}`)}`
+  if (keepCheckedBrief(await getDoc(token, pid, path).catch(() => null), a, changePct)) {
+    await patchDoc(token, pid, path, { band }, { mask: ['band'] })
+    return
+  }
+  await patchDoc(token, pid, path, {
     priceSymbol: ps, date: dateStr, session, band, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], verdict: a.verdict, explainedPct: round2(changePct), at: Date.now(),
   })
 }
@@ -230,6 +235,8 @@ async function refreshBrief(env, { g, session, dateStr }) {
   let a = null
   try {
     a = await assessOpen({ nameHe: g.repName, symbol: g.symbol, priceSymbol: g.priceSymbol, market, date: dateStr, isIndex: !!g.isIndex, session, changePct, newsContext: news }, keys)
+    const existing = await getDoc(token, pid, `briefs/${encodeURIComponent(`${g.priceSymbol}__${dateStr}`)}`).catch(() => null)
+    if (keepCheckedBrief(existing, a, changePct ?? g.changePct)) return { ...a, ...existing }
     await patchDoc(token, pid, `briefs/${encodeURIComponent(`${g.priceSymbol}__${dateStr}`)}`, {
       priceSymbol: g.priceSymbol, date: dateStr, session, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], verdict: a.verdict, explainedPct: round2(changePct), at: Date.now(),
     })
