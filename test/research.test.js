@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { sectorBenchmark, parseSecAtom, parseFindings, researchQueries, gatherEvidence, checkerDomains, yahooNewsArticles, researchInstructions, cleanHebrewName, hebrewName } from '../lib/research.js'
+import { sectorBenchmark, parseSecAtom, parseFindings, researchQueries, gatherEvidence, checkerDomains, yahooNewsArticles, researchInstructions, cleanHebrewName, hebrewName, dailyArticles } from '../lib/research.js'
 
 const NOW = Date.parse('2026-09-28T14:00:00Z')
 
@@ -113,4 +113,19 @@ test('parseFindings: a URL followed by a backtick or quote keeps only the URL', 
 ביטחון: בינונית`
   const got = parseFindings(text, { urls: ['https://passportnews.co.il/article/210323'], now: NOW })
   assert.equal(got[0].url, 'https://passportnews.co.il/article/210323')
+})
+
+test('dailyArticles: checked daily causes inside the window become period evidence, biggest move first', () => {
+  const window = { startDate: '2026-09-23', endDate: '2026-09-30' }
+  const briefs = [
+    { date: '2026-09-30', explainedPct: 7.93, verdict: 'תוקן', assessment: 'אל על זינקה אחרי התקרית בטיסת פליי דובאי.', sources: [{ name: 'גלובס', url: 'https://www.globes.co.il/news/a' }, { name: 'Yahoo Finance', url: 'https://finance.yahoo.com/quote/ELAL.TA' }] },
+    { date: '2026-09-28', explainedPct: -1.2, verdict: 'אומת', assessment: 'ירידה עם השוק.', sources: [{ name: 'כלכליסט', url: 'https://www.calcalist.co.il/b' }] },
+    { date: '2026-09-29', explainedPct: 2, verdict: 'נתונים בלבד', assessment: 'מספרים בלבד', sources: [] },
+    { date: '2026-09-27', explainedPct: 3, verdict: 'תוקן', assessment: 'רק יאהו', sources: [{ name: 'Yahoo Finance', url: 'https://finance.yahoo.com/quote/ELAL.TA' }] },
+    { date: '2026-09-23', explainedPct: 5, verdict: 'תוקן', assessment: 'לפני החלון', sources: [{ name: 'גלובס', url: 'https://www.globes.co.il/c' }] },
+  ]
+  const got = dailyArticles(briefs, window)
+  assert.deepEqual(got.map((a) => [a.date, a.url, a.kind]), [['2026-09-30', 'https://www.globes.co.il/news/a', 'daily'], ['2026-09-28', 'https://www.calcalist.co.il/b', 'daily']])
+  assert.ok(got[0].title.includes('+7.93%') && got[0].title.includes('פליי דובאי'))
+  assert.deepEqual(dailyArticles(briefs, null), [])
 })

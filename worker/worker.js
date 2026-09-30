@@ -151,7 +151,7 @@ async function explainMover(env, { priceSymbol: ps, nameHe: savedName, isIndex, 
   })
 }
 
-const ilDateISO = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date())
+const ilDateISO = (ms = Date.now()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date(ms))
 const ilDateHe = () =>
   new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date())
 
@@ -282,7 +282,9 @@ async function refreshPeriod(env, { g, period }) {
   const ps = g.priceSymbol
   const path = `periods/${encodeURIComponent(ps)}`
   const existing = await getDoc(token, pid, path).catch(() => null)
-  const { doc } = await buildPeriodsDoc({ symbol: ps, nameHe: g.repName || ps, keys: llmKeys(env), existing, fetchSnapshot, explainMove, periods: [period] })
+  const days = Array.from({ length: 33 }, (_, i) => ilDateISO(Date.now() - i * 86_400_000))
+  const dailyBriefs = Object.values(await getDocs(token, pid, days.map((d) => `briefs/${encodeURIComponent(`${ps}__${d}`)}`)).catch(() => ({}))).filter(Boolean)
+  const { doc } = await buildPeriodsDoc({ symbol: ps, nameHe: g.repName || ps, keys: llmKeys(env), existing, fetchSnapshot, explainMove, periods: [period], dailyBriefs })
   if (!doc[period]) return
   await patchDoc(token, pid, path, doc, { mask: ['symbol', 'market', 'updatedAt', period] })
 }
