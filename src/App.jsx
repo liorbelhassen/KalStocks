@@ -5,6 +5,10 @@ import Settings from './components/Settings'
 import { searchCatalog, matchInstrument, kindLabel, sectorOf, SECTOR_ORDER } from './catalog'
 import { logoUrl, isFlag } from '../lib/logos'
 import { quotedInAgorot } from '../lib/quote'
+import { measuredAnalysis } from '../lib/analysis'
+import { diagnoseMove, BENCHMARK_LABELS } from '../lib/market'
+import { briefOutdated } from '../lib/volatility'
+import { LEGACY_TEXT_RE } from '../lib/validate'
 import { subscribeWatchlist, addToWatchlist, removeFromWatchlist, updateThreshold, updateQuantity, updatePrice, adoptLegacyWatchlist } from './services/watchlist'
 import { analyzeScreenshot, quoteSymbol, searchYahoo, resolveSymbol, primeInstrument } from './services/vision'
 import { subscribeAuth, signOutUser } from './services/auth'
@@ -32,7 +36,8 @@ export default function App() {
   const [open, setOpen] = useState(false)
   const [remoteResults, setRemoteResults] = useState([])
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [market, setMarket] = useState('IL') // active tab: 'IL' | 'US'
+  const [market, setMarketState] = useState(() => (localStorage.getItem('kal_market') === 'US' ? 'US' : 'IL')) // active tab: 'IL' | 'US'
+  const setMarket = (m) => { setMarketState(m); localStorage.setItem('kal_market', m) }
   const [filter, setFilter] = useState('') // filter the watched list by name/symbol
   const [syncTab, setSyncTab] = useState('today') // page-level "align all tiles to this period"
   const [syncKey, setSyncKey] = useState(0) // bumps on each align click to re-broadcast
@@ -192,6 +197,13 @@ export default function App() {
   }
 
   const todayIL = ilDate
+  // Same-session benchmark moves from the shared snapshots, for the data-only fallback text.
+  const marketContext = (sym, c, isIdx, mkt) => {
+    const facts = (mkt === 'US' ? ['^GSPC'] : ['TA35.TA', '^GSPC'])
+      .filter((b) => b !== sym && snapshots[b]?.changePct != null)
+      .map((b) => ({ symbol: b, label: BENCHMARK_LABELS[b], changePct: Math.round(snapshots[b].changePct * 100) / 100 }))
+    return facts.length ? { facts, diagnosis: diagnoseMove({ symbol: sym, isIndex: isIdx, changePct: c, facts }) } : {}
+  }
   const stocks = watchlist.map((w) => {
     const priceSym = w.priceSymbol || w.symbol
     const snap = snapshots[priceSym] || liveQuotes[priceSym]
@@ -203,7 +215,7 @@ export default function App() {
     const effectivePrice = w.manualPrice != null ? w.manualPrice : needsPrice ? null : snap?.priceIls
     const exp = explanations[w.symbol]
     // Only texts that passed the worker's fact-check (`verdict`) are shown as AI insights.
-    const brief = briefs[priceSym]?.verdict ? briefs[priceSym] : null
+    const brief = briefs[priceSym]?.verdict && !briefOutdated(briefs[priceSym], snap?.changePct) ? briefs[priceSym] : null
     const hhmm = (ms) => (ms ? new Date(ms).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '')
     // Priority: significant-event AI explanation → morning AI brief → a data-derived baseline
     // (so every instrument — indices included — always shows an insight, upgraded to AI when available).
@@ -211,14 +223,14 @@ export default function App() {
       const c = snap?.changePct
       if (c == null) return null
       const isIdx = snap.isIndex
-      const up = c >= 0
-      const verb = isIdx ? (up ? 'עלה' : 'ירד') : up ? 'עלתה' : 'ירדה'
-      const desc = Math.abs(c) < 0.3 ? `${isIdx ? 'נסחר' : 'נסחרת'} סביב רמת הפתיחה, ללא שינוי מהותי היום` : `${verb} ${Math.abs(c).toFixed(1)}% היום, במגמה ${up ? 'חיובית' : 'שלילית'}`
-      return { text: `${isIdx ? 'המדד' : 'המניה'} ${desc}.`, confidence: null, sources: [], at: '', kind: 'data' }
+      const text = Math.abs(c) < 0.3
+        ? `${isIdx ? 'המדד' : 'המניה'} ${isIdx ? 'נסחר' : 'נסחרת'} סביב רמת הפתיחה, ללא שינוי מהותי היום.`
+        : measuredAnalysis({ subject: w.nameHe, isIndex: isIdx, market: mkt, changePct: c, ...marketContext(priceSym, c, isIdx, mkt) })
+      return { text, confidence: null, sources: [], at: '', kind: 'data' }
     }
     // The brief is the authoritative, fresh, direction-aware insight (morning/midday/volatility trigger).
     // A legacy event explanation only fills in when there's no brief today; never let a stale one win.
-    const expFresh = exp && exp.date === todayIL && !!exp.verdict
+    const expFresh = exp && exp.date === todayIL && !!exp.verdict && !LEGACY_TEXT_RE.test(exp.explanation || '')
     const insight = brief
       ? { text: brief.assessment, confidence: brief.confidence, sources: brief.sources || [], at: hhmm(brief.at), ts: brief.at, kind: 'brief', session: brief.session }
       : expFresh

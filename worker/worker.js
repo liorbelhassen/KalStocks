@@ -9,11 +9,13 @@ import { assessOpen, buildMorningHtml } from '../lib/morning.js'
 import { explainMove } from '../lib/explain.js'
 import { visionExtract } from '../lib/vision.js'
 import { askWithSearch } from '../lib/llm.js'
-import { classify, triggerBand } from '../lib/volatility.js'
+import { classify, triggerBand, briefOutdated, keepCheckedBrief } from '../lib/volatility.js'
 import { quotedInAgorot } from '../lib/quote.js'
 import { fetchHeadlines, buildNewsContext } from '../lib/telegram.js'
-import { buildPeriodsDoc, marketOf } from '../lib/periods.js'
+import { buildPeriodsDoc, marketOf, marketTz } from '../lib/periods.js'
 import { logEvent } from '../lib/validate.js'
+import { measuredAnalysis } from '../lib/analysis.js'
+import { fetchProfile, hebrewName } from '../lib/research.js'
 
 const ALLOWED = ['https://kalstocks1.web.app', 'http://localhost:5175', 'http://localhost:5173']
 
@@ -38,7 +40,7 @@ const CHUNK = 8
 const chunks = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n))
 const llmKeys = (env) => ({ geminiKey: env.GEMINI_API_KEY, geminiModel: env.GEMINI_MODEL, openaiKey: env.OPENAI_API_KEY, openaiModel: env.OPENAI_MODEL, openaiVerifyModel: env.OPENAI_VERIFY_MODEL })
 const hasLlm = (env) => !!(env.GEMINI_API_KEY || env.OPENAI_API_KEY)
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+const round2 = (n) => (n != null && Number.isFinite(n) ? Math.round(n * 100) / 100 : null)
 
 async function firestore(env) {
   const sa = JSON.parse(env.SERVICE_ACCOUNT)
@@ -80,31 +82,76 @@ async function pollChunk(env, { items, dateStr, session }) {
   const bySym = Object.fromEntries(ok.map((s) => [s.symbol, s]))
   const briefPath = (ps) => `briefs/${encodeURIComponent(`${ps}__${dateStr}`)}`
   const prior = await getDocs(token, pid, ok.map((s) => briefPath(s.symbol)))
+  const due = []
   for (const it of items) {
     const snap = bySym[it.priceSymbol]
-    if (!snap || it.snapshotOnly) continue
+    if (!snap || it.snapshotOnly || !tradedToday(snap, marketOf(it.priceSymbol))) continue
     const c = classify(snap, it.thresholdPct || 0.5)
     const band = triggerBand(c)
-    if (!c.significant || (prior[briefPath(it.priceSymbol)]?.band || 0) >= band) continue // not significant, or level already explained
-    try {
-      await env.JOBS.explainMover({ priceSymbol: it.priceSymbol, nameHe: it.nameHe, isIndex: !!snap.isIndex, changePct: snap.changePct, band, dateStr, session })
-    } catch (e) {
-      logEvent('warn', { stage: e.stage || 'brief', symbol: it.priceSymbol, period: 'day', changePct: snap.changePct, error: String(e) })
-    }
+    const p = prior[briefPath(it.priceSymbol)]
+    if (!c.significant || ((p?.band || 0) >= band && !briefOutdated(p, snap.changePct))) continue // level already explained
+    due.push({ priceSymbol: it.priceSymbol, nameHe: it.nameHe, isIndex: !!snap.isIndex, changePct: snap.changePct, band, dateStr, session })
   }
+  await Promise.all(due.map((d) => env.JOBS.explainMover(d).catch((e) =>
+    logEvent('warn', { stage: e.stage || 'brief', symbol: d.priceSymbol, period: 'day', changePct: d.changePct, error: String(e) }))))
 }
 
-async function explainMover(env, { priceSymbol: ps, nameHe, isIndex, changePct, band, dateStr, session }) {
+// The snapshot is from today's session (before the open Yahoo still serves yesterday's bars).
+const tradedToday = (snap, market) => {
+  const day = (ms) => new Intl.DateTimeFormat('en-CA', { timeZone: snap.exchangeTz || marketTz(market) }).format(new Date(ms))
+  return day(snap.at) === day(Date.now())
+}
+
+// Numbers-only brief for when the AI path throws — a significant move is never left without text.
+const measuredBrief = ({ nameHe, isIndex, changePct, market }) => {
+  const text = changePct != null && Math.abs(changePct) >= 0.5
+    ? measuredAnalysis({ subject: nameHe, isIndex, market, changePct })
+    : null
+  return text && { assessment: text, sentiment: changePct > 0 ? 'חיובי' : 'שלילי', confidence: 'נמוכה', sources: [], verdict: 'נתונים בלבד' }
+}
+const headlines = () => fetchHeadlines().catch(() => [])
+
+// TASE securities added under Yahoo's English name ("EL AL ISRAEL AIRLI") are researched and
+// described by their Hebrew press name ("אל על"), resolved once and cached in `names/{symbol}`.
+async function researchName(env, token, pid, ps, nameHe) {
+  if (marketOf(ps) !== 'IL' || ps.startsWith('X-') || /[\u0590-\u05FF]/.test(nameHe || '') || !hasLlm(env)) return nameHe
+  const path = `names/${encodeURIComponent(ps)}`
+  const cached = await getDoc(token, pid, path).catch(() => null)
+  if (cached?.nameHe) return cached.nameHe
+  const englishName = (await fetchProfile(ps).catch(() => null))?.name || nameHe
+  const he = await hebrewName({ symbol: ps, englishName }, llmKeys(env)).catch((e) => {
+    logEvent('warn', { stage: 'hebrew-name', symbol: ps, error: String(e) })
+    return null
+  })
+  if (!he) return nameHe
+  await patchDoc(token, pid, path, { symbol: ps, nameHe: he, englishName, at: Date.now() }).catch(() => {})
+  return he
+}
+
+async function explainMover(env, { priceSymbol: ps, nameHe: savedName, isIndex, changePct, band, dateStr, session }) {
   const { token, pid } = await firestore(env)
   const market = marketOf(ps)
-  const news = buildNewsContext(await fetchHeadlines(), { market, nameHe, symbol: ps })
-  const a = await assessOpen({ nameHe, symbol: isIndex ? '' : ps, priceSymbol: ps, market, date: dateStr, isIndex, session, changePct, newsContext: news }, llmKeys(env))
-  await patchDoc(token, pid, `briefs/${encodeURIComponent(`${ps}__${dateStr}`)}`, {
-    priceSymbol: ps, date: dateStr, session, band, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], verdict: a.verdict, at: Date.now(),
+  const nameHe = await researchName(env, token, pid, ps, savedName)
+  let a
+  try {
+    const news = buildNewsContext(await headlines(), { market, nameHe, symbol: ps })
+    a = await assessOpen({ nameHe, symbol: isIndex ? '' : ps, priceSymbol: ps, market, date: dateStr, isIndex, session, changePct, newsContext: news }, llmKeys(env))
+  } catch (e) {
+    a = measuredBrief({ nameHe, isIndex, changePct, market })
+    if (!a) throw e
+    logEvent('warn', { stage: e.stage || 'brief', symbol: ps, period: 'day', changePct, fallback: 'measured', error: String(e) })
+  }
+  const path = `briefs/${encodeURIComponent(`${ps}__${dateStr}`)}`
+  if (keepCheckedBrief(await getDoc(token, pid, path).catch(() => null), a, changePct)) {
+    await patchDoc(token, pid, path, { band }, { mask: ['band'] })
+    return
+  }
+  await patchDoc(token, pid, path, {
+    priceSymbol: ps, date: dateStr, session, band, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], verdict: a.verdict, explainedPct: round2(changePct), at: Date.now(),
   })
 }
 
-const ilDateISO = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date())
+const ilDateISO = (ms = Date.now()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date(ms))
 const ilDateHe = () =>
   new Intl.DateTimeFormat('he-IL', { timeZone: 'Asia/Jerusalem', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date())
 
@@ -161,7 +208,7 @@ async function morningJob(env, { force = null, email = true, only = null } = {})
     .map((w) => {
       const ps = w.priceSymbol || w.symbol
       const a = assessments[ps] || {}
-      return { symbol: w.symbol, nameHe: w.nameHe, kind: w.kind, currency: (w.market || 'IL') === 'US' ? '$' : '₪', isIndex: snaps[ps]?.isIndex, agorot: quotedInAgorot(snaps[ps]), priceIls: snaps[ps]?.priceIls, assessment: a.assessment || 'לא נמצאה הערכה.', sentiment: a.sentiment, confidence: a.confidence, sources: a.sources }
+      return { symbol: w.symbol, priceSymbol: ps, nameHe: w.nameHe, kind: w.kind, currency: (w.market || 'IL') === 'US' ? '$' : '₪', isIndex: snaps[ps]?.isIndex, agorot: quotedInAgorot(snaps[ps]), priceIls: snaps[ps]?.priceIls, assessment: a.assessment || 'לא נמצאה הערכה.', sentiment: a.sentiment, confidence: a.confidence, sources: a.sources }
     })
   const html = buildMorningHtml({ dateStr: ilDateHe(), items: emailItems, session: 'morning' })
   if (env.RESEND_API_KEY && env.DIGEST_TO) {
@@ -175,51 +222,71 @@ async function morningJob(env, { force = null, email = true, only = null } = {})
   return summary
 }
 
-// Symbols of one chunk, one invocation each, paced for Gemini's ~20 requests/minute free limit.
+// Symbols of one chunk, one invocation each, in parallel (each waits minutes on deep research).
 async function refreshChunk(env, { groups, session, dateStr }) {
   const out = {}
-  for (const g of groups) {
+  await Promise.all(groups.map(async (g) => {
     try {
       const a = await env.JOBS.refreshSymbol({ g, session, dateStr })
       if (a) out[g.priceSymbol] = a
     } catch (e) {
       logEvent('error', { stage: 'refresh-symbol', symbol: g.priceSymbol, error: String(e) })
     }
-    await sleep(4500)
-  }
+  }))
   return out
 }
 
-// Today's brief + week/month periods for one instrument. Returns the assessment (for the email).
-async function refreshSymbol(env, { g, session, dateStr }) {
+// Today's brief for one instrument, with its week and month periods in parallel invocations (each
+// its own subrequest budget). Returns the assessment (for the email).
+async function refreshSymbol(env, { g: saved, session, dateStr }) {
   const { token, pid } = await firestore(env)
-  const keys = llmKeys(env)
-  const market = marketOf(g.priceSymbol)
-  const news = buildNewsContext(await fetchHeadlines(), { market, nameHe: g.repName, symbol: g.priceSymbol }) // real headlines (anti-hallucination)
-  let a = null
-  try {
-    a = await assessOpen({ nameHe: g.repName, symbol: g.symbol, priceSymbol: g.priceSymbol, market, date: dateStr, isIndex: !!g.isIndex, session, changePct: session === 'midday' || g.useChange ? g.changePct : null, newsContext: news }, keys)
-    await patchDoc(token, pid, `briefs/${encodeURIComponent(`${g.priceSymbol}__${dateStr}`)}`, {
-      priceSymbol: g.priceSymbol, date: dateStr, session, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], verdict: a.verdict, at: Date.now(),
-    })
-  } catch (e) {
-    logEvent('warn', { stage: e.stage || 'brief', symbol: g.priceSymbol, period: 'day', session, error: e.message })
-  }
-  if (!g.isOther) await refreshPeriods(token, pid, g, keys) // no Yahoo series for manual-price stocks
+  const g = { ...saved, repName: await researchName(env, token, pid, saved.priceSymbol, saved.repName) }
+  const periods = g.isOther ? [] : ['week', 'month'].map((period) => // no Yahoo series for manual-price stocks
+    env.JOBS.refreshPeriod({ g, period }).catch((e) => logEvent('error', { stage: 'store-periods', symbol: g.priceSymbol, period, error: String(e) })))
+  const [a] = await Promise.all([refreshBrief(env, { g, session, dateStr }), ...periods])
   return a
 }
 
-// Week/month period data + explanations. Explanations are keyed by the exact window (symbol +
-// period + start/end dates), so a stale text is never re-served for a new window.
-async function refreshPeriods(token, pid, g, keys) {
-  const ps = g.priceSymbol
+async function refreshBrief(env, { g, session, dateStr }) {
+  const { token, pid } = await firestore(env)
+  const keys = llmKeys(env)
+  const market = marketOf(g.priceSymbol)
+  const news = buildNewsContext(await headlines(), { market, nameHe: g.repName, symbol: g.priceSymbol }) // real headlines (anti-hallucination)
+  const changePct = session === 'midday' || g.useChange ? g.changePct : null
+  let a = null
   try {
-    const existing = await getDoc(token, pid, `periods/${encodeURIComponent(ps)}`).catch(() => null)
-    const { doc } = await buildPeriodsDoc({ symbol: ps, nameHe: g.repName || ps, keys, existing, fetchSnapshot, explainMove, sleep: () => sleep(4500) })
-    await patchDoc(token, pid, `periods/${encodeURIComponent(ps)}`, doc)
+    a = await assessOpen({ nameHe: g.repName, symbol: g.symbol, priceSymbol: g.priceSymbol, market, date: dateStr, isIndex: !!g.isIndex, session, changePct, newsContext: news }, keys)
+    const existing = await getDoc(token, pid, `briefs/${encodeURIComponent(`${g.priceSymbol}__${dateStr}`)}`).catch(() => null)
+    if (keepCheckedBrief(existing, a, changePct ?? g.changePct)) return { ...a, ...existing }
+    await patchDoc(token, pid, `briefs/${encodeURIComponent(`${g.priceSymbol}__${dateStr}`)}`, {
+      priceSymbol: g.priceSymbol, date: dateStr, session, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], verdict: a.verdict, explainedPct: round2(changePct), at: Date.now(),
+    })
   } catch (e) {
-    logEvent('error', { stage: 'store-periods', symbol: ps, error: String(e) })
+    logEvent('warn', { stage: e.stage || 'brief', symbol: g.priceSymbol, period: 'day', session, error: e.message })
+    const fb = !a && measuredBrief({ nameHe: g.repName, isIndex: !!g.isIndex, changePct: g.changePct, market })
+    if (fb) {
+      a = fb
+      await patchDoc(token, pid, `briefs/${encodeURIComponent(`${g.priceSymbol}__${dateStr}`)}`, {
+        priceSymbol: g.priceSymbol, date: dateStr, session, ...fb, explainedPct: round2(g.changePct), at: Date.now(),
+      }).catch((err) => logEvent('error', { stage: 'store-brief', symbol: g.priceSymbol, error: String(err) }))
+    }
   }
+  return a
+}
+
+// One period (week or month) of `periods/{symbol}`: data + explanation. Explanations are keyed by
+// the exact window (symbol + period + start/end dates), so a stale text is never re-served for a
+// new window. Only that period's field is written, so week and month can run in parallel.
+async function refreshPeriod(env, { g, period }) {
+  const { token, pid } = await firestore(env)
+  const ps = g.priceSymbol
+  const path = `periods/${encodeURIComponent(ps)}`
+  const existing = await getDoc(token, pid, path).catch(() => null)
+  const days = Array.from({ length: 33 }, (_, i) => ilDateISO(Date.now() - i * 86_400_000))
+  const dailyBriefs = Object.values(await getDocs(token, pid, days.map((d) => `briefs/${encodeURIComponent(`${ps}__${d}`)}`)).catch(() => ({}))).filter(Boolean)
+  const { doc } = await buildPeriodsDoc({ symbol: ps, nameHe: g.repName || ps, keys: llmKeys(env), existing, fetchSnapshot, explainMove, periods: [period], dailyBriefs })
+  if (!doc[period]) return
+  await patchDoc(token, pid, path, doc, { mask: ['symbol', 'market', 'updatedAt', period] })
 }
 
 // On-demand generation for a single instrument (when a user just added it) — today's brief +
@@ -228,8 +295,9 @@ async function primeSymbol(env, symbol, nameHe, isIndex) {
   const dateStr = ilDateISO()
   const session = Math.floor(minutesInZone('Asia/Jerusalem').min / 60) < 12 ? 'morning' : 'midday'
   // Current-day change so the just-added stock's insight matches its actual direction.
-  let changePct = null
-  if (!symbol.startsWith('X-')) { try { changePct = (await fetchSnapshot(symbol)).changePct } catch { /* ignore */ } }
+  let snap = null
+  if (!symbol.startsWith('X-')) { try { snap = await fetchSnapshot(symbol) } catch { /* ignore */ } }
+  const changePct = snap?.changePct ?? null
   const isOther = symbol.startsWith('X-')
   await refreshSymbol(env, { g: { priceSymbol: symbol, repName: nameHe, isIndex, isOther, symbol: isIndex ? '' : symbol, changePct, useChange: true }, session, dateStr })
 }
@@ -391,4 +459,5 @@ export class Jobs extends WorkerEntrypoint {
   explainMover(args) { return explainMover(this.env, args) }
   refreshChunk(args) { return refreshChunk(this.env, args) }
   refreshSymbol(args) { return refreshSymbol(this.env, args) }
+  refreshPeriod(args) { return refreshPeriod(this.env, args) }
 }

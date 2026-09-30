@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import PriceChart from './PriceChart'
-import { MiniField, tileView, fmt0, fmtTs } from './tileBits'
+import { MiniField, tileView, fmt0, fmtTs, SourceLinks } from './tileBits'
 import { quotePrice } from '../../lib/quote'
 
 const TABS = [['today', 'היום'], ['week', 'השבוע'], ['month', 'החודש']]
@@ -54,7 +54,7 @@ export default function FamilyCard({ title, rep, members, insightFontSize = 14, 
           {view.insight.confidence && (
             <div style={{ fontSize: 10.5, color: 'var(--text-dim)', marginTop: 1 }}>
               ביטחון: {view.insight.confidence}
-              {view.insight.sources.length > 0 && ` · ${view.insight.sources.slice(0, 2).join(', ')}`}
+              {view.insight.sources.length > 0 && <> · <SourceLinks sources={view.insight.sources} symbol={rep.priceSymbol || rep.symbol} /></>}
             </div>
           )}
         </div>

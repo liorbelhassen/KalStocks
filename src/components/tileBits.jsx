@@ -1,5 +1,8 @@
 import { useState } from 'react'
 import { isPeriodCurrent } from '../../lib/periods'
+import { META_RE, LEGACY_TEXT_RE } from '../../lib/validate'
+import { measuredAnalysis } from '../../lib/analysis'
+import { sourceLinks } from '../../lib/sources'
 
 export const fmt = (n) => n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 export const fmt0 = (n) => n.toLocaleString('he-IL', { maximumFractionDigits: 0 })
@@ -27,10 +30,9 @@ export function periodInsight(p, period, now = Date.now()) {
   if (!p) return null
   const label = period === 'week' ? '📅 השבוע' : '🗓️ החודש'
   if (!isPeriodCurrent(p, now)) return { text: 'הנתונים לתקופה זו עדיין לא עודכנו — הם יופיעו אחרי העדכון הבא.', confidence: null, sources: [], label }
-  if (p.explanation && p.verdict) return { text: p.explanation, confidence: p.confidence, sources: p.sources || [], label }
-  const dir = (p.changePct ?? 0) >= 0 ? 'עלה' : 'ירד'
-  const periodHe = period === 'week' ? 'בשבוע האחרון' : 'בחודש האחרון'
-  return { text: `הנייר ${dir} ${Math.abs(p.changePct ?? 0).toFixed(1)}% ${periodHe}.`, confidence: null, sources: [], label }
+  if (p.explanation && p.verdict && !META_RE.test(p.explanation) && !LEGACY_TEXT_RE.test(p.explanation)) return { text: p.explanation, confidence: p.confidence, sources: p.sources || [], label }
+  const text = measuredAnalysis({ subject: 'הנייר', market: p.market, changePct: p.changePct ?? 0, period })
+  return { text, confidence: null, sources: [], label }
 }
 
 export function todayLabel(explanation) {
@@ -60,4 +62,13 @@ export function tileView(stock, tab) {
   }
   const todayInsight = stock.explanation ? { ...stock.explanation, label: todayLabel(stock.explanation) } : null
   return { pct: stock.changePct, series: stock.series || [], insight: todayInsight, ts: stock.explanation?.ts }
+}
+
+export function SourceLinks({ sources, symbol }) {
+  return sourceLinks(sources, symbol).slice(0, 2).map((s, i) => (
+    <span key={s.name}>
+      {i ? ', ' : ''}
+      {s.url ? <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>{s.name}</a> : s.name}
+    </span>
+  ))
 }
