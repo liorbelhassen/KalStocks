@@ -162,3 +162,11 @@ test('isCurrentPeriodEntry: a text written for a different move or leaking check
   assert.equal(isCurrentPeriodEntry({ ...e, explanation: 'לא אומת בסיס לדוחות מאכזבים' }, w), false)
 })
 
+
+test('isCurrentPeriodEntry: an old price-path fallback text is not reused', async () => {
+  const { isCurrentPeriodEntry } = await import('../lib/periods.js')
+  const window = { key: 'MSFT__week__2026-09-23_2026-09-30' }
+  const entry = { key: window.key, verdict: 'נתונים בלבד', explainedPct: 1.67, explanation: 'מיקרוסופט עלתה 1.67% בשבוע האחרון. באותה תקופה: S&P 500 −0.46%; לעומת S&P 500 (−0.46%) — כלומר תנועה ייחודית לנייר. הנקודה הגבוהה נרשמה ב-25.09.' }
+  assert.equal(isCurrentPeriodEntry(entry, window, 1.67), false)
+  assert.equal(isCurrentPeriodEntry({ ...entry, explanation: 'מניית מיקרוסופט עלתה 1.67% בשבוע האחרון, הרבה יותר מהשוק.' }, window, 1.67), true)
+})

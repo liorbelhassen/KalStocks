@@ -8,6 +8,7 @@ import { quotedInAgorot } from '../lib/quote'
 import { measuredAnalysis } from '../lib/analysis'
 import { diagnoseMove, BENCHMARK_LABELS } from '../lib/market'
 import { briefOutdated } from '../lib/volatility'
+import { LEGACY_TEXT_RE } from '../lib/validate'
 import { subscribeWatchlist, addToWatchlist, removeFromWatchlist, updateThreshold, updateQuantity, updatePrice, adoptLegacyWatchlist } from './services/watchlist'
 import { analyzeScreenshot, quoteSymbol, searchYahoo, resolveSymbol, primeInstrument } from './services/vision'
 import { subscribeAuth, signOutUser } from './services/auth'
@@ -229,7 +230,7 @@ export default function App() {
     }
     // The brief is the authoritative, fresh, direction-aware insight (morning/midday/volatility trigger).
     // A legacy event explanation only fills in when there's no brief today; never let a stale one win.
-    const expFresh = exp && exp.date === todayIL && !!exp.verdict
+    const expFresh = exp && exp.date === todayIL && !!exp.verdict && !LEGACY_TEXT_RE.test(exp.explanation || '')
     const insight = brief
       ? { text: brief.assessment, confidence: brief.confidence, sources: brief.sources || [], at: hhmm(brief.at), ts: brief.at, kind: 'brief', session: brief.session }
       : expFresh

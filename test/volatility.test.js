@@ -56,3 +56,9 @@ test('keepCheckedBrief: a numbers-only retry never replaces a checked text for t
   assert.equal(keepCheckedBrief({ ...checked, verdict: 'נתונים בלבד' }, fb, -1.3), false)
   assert.equal(keepCheckedBrief(null, fb, -1.3), false)
 })
+
+test('briefOutdated: a text in the old price-path fallback format is always re-explained', () => {
+  const old = { assessment: 'מיקרוסופט עלתה 1.67% בשבוע האחרון. הנקודה הגבוהה נרשמה ב-25.09 (+3.45%). לא נמצאה בחדשות סיבה ספציפית מאומתת לתנועה.', verdict: 'נתונים בלבד', explainedPct: 1.67 }
+  assert.equal(briefOutdated(old, 1.67), true)
+  assert.equal(briefOutdated({ ...old, assessment: 'מניית מיקרוסופט עלתה 1.67% יחד עם מניות הטכנולוגיה.' }, 1.67), false)
+})

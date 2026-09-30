@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { isPeriodCurrent } from '../../lib/periods'
-import { META_RE } from '../../lib/validate'
+import { META_RE, LEGACY_TEXT_RE } from '../../lib/validate'
 import { measuredAnalysis } from '../../lib/analysis'
 
 export const fmt = (n) => n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -29,7 +29,7 @@ export function periodInsight(p, period, now = Date.now()) {
   if (!p) return null
   const label = period === 'week' ? '📅 השבוע' : '🗓️ החודש'
   if (!isPeriodCurrent(p, now)) return { text: 'הנתונים לתקופה זו עדיין לא עודכנו — הם יופיעו אחרי העדכון הבא.', confidence: null, sources: [], label }
-  if (p.explanation && p.verdict && !META_RE.test(p.explanation)) return { text: p.explanation, confidence: p.confidence, sources: p.sources || [], label }
+  if (p.explanation && p.verdict && !META_RE.test(p.explanation) && !LEGACY_TEXT_RE.test(p.explanation)) return { text: p.explanation, confidence: p.confidence, sources: p.sources || [], label }
   const text = measuredAnalysis({ subject: 'הנייר', market: p.market, changePct: p.changePct ?? 0, period })
   return { text, confidence: null, sources: [], label }
 }
