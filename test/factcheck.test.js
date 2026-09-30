@@ -122,3 +122,13 @@ test('checkClaims: rejects checker meta-commentary leaking into the published te
   const leaked = `${grounded} לא אומת בסיס לדוחות מאכזבים כגורם המכריע.`
   assert.equal(checkClaims(leaked, { changePct: -0.49, facts, diagnosis }).reason, 'meta-commentary')
 })
+
+test('checkClaims: a sector-wide move must be explained through the sector', () => {
+  const sf = [{ symbol: 'TA35.TA', label: 'מדד ת"א 35', changePct: -0.1 }, { symbol: 'TA-BANKS.TA', label: 'מדד הבנקים', group: 'מניות הבנקים', role: 'sector', changePct: -1 }]
+  const diagnosis = diagnoseMove({ symbol: 'DSCT.TA', changePct: -1.2, facts: sf })
+  assert.equal(diagnosis.kind, 'sector-wide')
+  const own = checkClaims('מניית בנק דיסקונט ירדה 1.20% היום אחרי שהמשקיעים חששו מהתוצאות של החברה ברבעון הקרוב.', { changePct: -1.2, facts: sf, diagnosis, verified: [] })
+  assert.deepEqual([own.ok, own.reason], [false, 'ignores-sector-driver'])
+  const sec = checkClaims('מניית בנק דיסקונט ירדה 1.20% היום יחד עם כל מניות הבנקים, שנחלשו אחרי שבנק ישראל השאיר את הריבית ללא שינוי.', { changePct: -1.2, facts: sf, diagnosis, verified: [] })
+  assert.notEqual(sec.reason, 'ignores-sector-driver')
+})

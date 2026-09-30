@@ -105,10 +105,12 @@ function toValue(v) {
   return { nullValue: null }
 }
 
-export async function patchDoc(token, pid, path, obj) {
+/** Write `obj`. With `mask`, only those top-level fields are replaced; the rest of the doc is kept. */
+export async function patchDoc(token, pid, path, obj, { mask = null } = {}) {
   const fields = {}
   for (const k in obj) fields[k] = toValue(obj[k])
-  const res = await fetch(`${base(pid)}/${path}`, {
+  const qs = mask ? `?${mask.map((f) => `updateMask.fieldPaths=${encodeURIComponent(f)}`).join('&')}` : ''
+  const res = await fetch(`${base(pid)}/${path}${qs}`, {
     method: 'PATCH',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ fields }),

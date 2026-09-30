@@ -9,7 +9,7 @@ import { assessOpen, buildMorningHtml } from '../lib/morning.js'
 import { explainMove } from '../lib/explain.js'
 import { visionExtract } from '../lib/vision.js'
 import { askWithSearch } from '../lib/llm.js'
-import { classify, triggerBand } from '../lib/volatility.js'
+import { classify, triggerBand, briefOutdated } from '../lib/volatility.js'
 import { quotedInAgorot } from '../lib/quote.js'
 import { fetchHeadlines, buildNewsContext } from '../lib/telegram.js'
 import { buildPeriodsDoc, marketOf, marketTz } from '../lib/periods.js'
@@ -39,7 +39,7 @@ const CHUNK = 8
 const chunks = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n))
 const llmKeys = (env) => ({ geminiKey: env.GEMINI_API_KEY, geminiModel: env.GEMINI_MODEL, openaiKey: env.OPENAI_API_KEY, openaiModel: env.OPENAI_MODEL, openaiVerifyModel: env.OPENAI_VERIFY_MODEL })
 const hasLlm = (env) => !!(env.GEMINI_API_KEY || env.OPENAI_API_KEY)
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+const round2 = (n) => (n != null && Number.isFinite(n) ? Math.round(n * 100) / 100 : null)
 
 async function firestore(env) {
   const sa = JSON.parse(env.SERVICE_ACCOUNT)
@@ -81,43 +81,49 @@ async function pollChunk(env, { items, dateStr, session }) {
   const bySym = Object.fromEntries(ok.map((s) => [s.symbol, s]))
   const briefPath = (ps) => `briefs/${encodeURIComponent(`${ps}__${dateStr}`)}`
   const prior = await getDocs(token, pid, ok.map((s) => briefPath(s.symbol)))
+  const due = []
   for (const it of items) {
     const snap = bySym[it.priceSymbol]
-    if (!snap || it.snapshotOnly) continue
+    if (!snap || it.snapshotOnly || !tradedToday(snap, marketOf(it.priceSymbol))) continue
     const c = classify(snap, it.thresholdPct || 0.5)
     const band = triggerBand(c)
-    if (!c.significant || (prior[briefPath(it.priceSymbol)]?.band || 0) >= band) continue // not significant, or level already explained
-    try {
-      await env.JOBS.explainMover({ priceSymbol: it.priceSymbol, nameHe: it.nameHe, isIndex: !!snap.isIndex, changePct: snap.changePct, series: snap.series || [], base: snap.previousClose ?? null, band, dateStr, session })
-    } catch (e) {
-      logEvent('warn', { stage: e.stage || 'brief', symbol: it.priceSymbol, period: 'day', changePct: snap.changePct, error: String(e) })
-    }
+    const p = prior[briefPath(it.priceSymbol)]
+    if (!c.significant || ((p?.band || 0) >= band && !briefOutdated(p, snap.changePct))) continue // level already explained
+    due.push({ priceSymbol: it.priceSymbol, nameHe: it.nameHe, isIndex: !!snap.isIndex, changePct: snap.changePct, band, dateStr, session })
   }
+  await Promise.all(due.map((d) => env.JOBS.explainMover(d).catch((e) =>
+    logEvent('warn', { stage: e.stage || 'brief', symbol: d.priceSymbol, period: 'day', changePct: d.changePct, error: String(e) }))))
+}
+
+// The snapshot is from today's session (before the open Yahoo still serves yesterday's bars).
+const tradedToday = (snap, market) => {
+  const day = (ms) => new Intl.DateTimeFormat('en-CA', { timeZone: snap.exchangeTz || marketTz(market) }).format(new Date(ms))
+  return day(snap.at) === day(Date.now())
 }
 
 // Numbers-only brief for when the AI path throws — a significant move is never left without text.
-const measuredBrief = ({ nameHe, isIndex, changePct, series, base, market }) => {
+const measuredBrief = ({ nameHe, isIndex, changePct, market }) => {
   const text = changePct != null && Math.abs(changePct) >= 0.5
-    ? measuredAnalysis({ subject: nameHe, isIndex, changePct, series, base, tz: marketTz(market) })
+    ? measuredAnalysis({ subject: nameHe, isIndex, market, changePct })
     : null
   return text && { assessment: text, sentiment: changePct > 0 ? 'חיובי' : 'שלילי', confidence: 'נמוכה', sources: [], verdict: 'נתונים בלבד' }
 }
 const headlines = () => fetchHeadlines().catch(() => [])
 
-async function explainMover(env, { priceSymbol: ps, nameHe, isIndex, changePct, series, base, band, dateStr, session }) {
+async function explainMover(env, { priceSymbol: ps, nameHe, isIndex, changePct, band, dateStr, session }) {
   const { token, pid } = await firestore(env)
   const market = marketOf(ps)
   let a
   try {
     const news = buildNewsContext(await headlines(), { market, nameHe, symbol: ps })
-    a = await assessOpen({ nameHe, symbol: isIndex ? '' : ps, priceSymbol: ps, market, date: dateStr, isIndex, session, changePct, series, base, newsContext: news }, llmKeys(env))
+    a = await assessOpen({ nameHe, symbol: isIndex ? '' : ps, priceSymbol: ps, market, date: dateStr, isIndex, session, changePct, newsContext: news }, llmKeys(env))
   } catch (e) {
-    a = measuredBrief({ nameHe, isIndex, changePct, series, base, market })
+    a = measuredBrief({ nameHe, isIndex, changePct, market })
     if (!a) throw e
     logEvent('warn', { stage: e.stage || 'brief', symbol: ps, period: 'day', changePct, fallback: 'measured', error: String(e) })
   }
   await patchDoc(token, pid, `briefs/${encodeURIComponent(`${ps}__${dateStr}`)}`, {
-    priceSymbol: ps, date: dateStr, session, band, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], verdict: a.verdict, at: Date.now(),
+    priceSymbol: ps, date: dateStr, session, band, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], verdict: a.verdict, explainedPct: round2(changePct), at: Date.now(),
   })
 }
 
@@ -149,7 +155,7 @@ async function morningJob(env, { force = null, email = true, only = null } = {})
     const ps = w.priceSymbol || w.symbol
     if (!ps || (only && !only.includes(ps))) continue
     const isOther = w.kind === 'other'
-    if (!groups.has(ps)) groups.set(ps, { priceSymbol: ps, repName: w.nameHe, isIndex: !!snaps[ps]?.isIndex, isOther, symbol: isOther ? '' : ps, changePct: snaps[ps]?.changePct ?? null, series: snaps[ps]?.series || [], base: snaps[ps]?.previousClose ?? null })
+    if (!groups.has(ps)) groups.set(ps, { priceSymbol: ps, repName: w.nameHe, isIndex: !!snaps[ps]?.isIndex, isOther, symbol: isOther ? '' : ps, changePct: snaps[ps]?.changePct ?? null })
     // Several ETFs share one price symbol (e.g. TA35.TA). Describe the group by the instrument that
     // IS the price symbol (the index), never by whichever ETF happened to be listed last.
     if (w.symbol === ps) groups.get(ps).repName = w.nameHe
@@ -192,58 +198,65 @@ async function morningJob(env, { force = null, email = true, only = null } = {})
   return summary
 }
 
-// Symbols of one chunk, one invocation each, paced for Gemini's ~20 requests/minute free limit.
+// Symbols of one chunk, one invocation each, in parallel (each waits minutes on deep research).
 async function refreshChunk(env, { groups, session, dateStr }) {
   const out = {}
-  for (const g of groups) {
+  await Promise.all(groups.map(async (g) => {
     try {
       const a = await env.JOBS.refreshSymbol({ g, session, dateStr })
       if (a) out[g.priceSymbol] = a
     } catch (e) {
       logEvent('error', { stage: 'refresh-symbol', symbol: g.priceSymbol, error: String(e) })
     }
-    await sleep(4500)
-  }
+  }))
   return out
 }
 
-// Today's brief + week/month periods for one instrument. Returns the assessment (for the email).
+// Today's brief for one instrument, with its week and month periods in parallel invocations (each
+// its own subrequest budget). Returns the assessment (for the email).
 async function refreshSymbol(env, { g, session, dateStr }) {
+  const periods = g.isOther ? [] : ['week', 'month'].map((period) => // no Yahoo series for manual-price stocks
+    env.JOBS.refreshPeriod({ g, period }).catch((e) => logEvent('error', { stage: 'store-periods', symbol: g.priceSymbol, period, error: String(e) })))
+  const [a] = await Promise.all([refreshBrief(env, { g, session, dateStr }), ...periods])
+  return a
+}
+
+async function refreshBrief(env, { g, session, dateStr }) {
   const { token, pid } = await firestore(env)
   const keys = llmKeys(env)
   const market = marketOf(g.priceSymbol)
   const news = buildNewsContext(await headlines(), { market, nameHe: g.repName, symbol: g.priceSymbol }) // real headlines (anti-hallucination)
+  const changePct = session === 'midday' || g.useChange ? g.changePct : null
   let a = null
   try {
-    a = await assessOpen({ nameHe: g.repName, symbol: g.symbol, priceSymbol: g.priceSymbol, market, date: dateStr, isIndex: !!g.isIndex, session, changePct: session === 'midday' || g.useChange ? g.changePct : null, series: g.series, base: g.base, newsContext: news }, keys)
+    a = await assessOpen({ nameHe: g.repName, symbol: g.symbol, priceSymbol: g.priceSymbol, market, date: dateStr, isIndex: !!g.isIndex, session, changePct, newsContext: news }, keys)
     await patchDoc(token, pid, `briefs/${encodeURIComponent(`${g.priceSymbol}__${dateStr}`)}`, {
-      priceSymbol: g.priceSymbol, date: dateStr, session, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], verdict: a.verdict, at: Date.now(),
+      priceSymbol: g.priceSymbol, date: dateStr, session, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], verdict: a.verdict, explainedPct: round2(changePct), at: Date.now(),
     })
   } catch (e) {
     logEvent('warn', { stage: e.stage || 'brief', symbol: g.priceSymbol, period: 'day', session, error: e.message })
-    const fb = !a && measuredBrief({ nameHe: g.repName, isIndex: !!g.isIndex, changePct: g.changePct, series: g.series, base: g.base, market })
+    const fb = !a && measuredBrief({ nameHe: g.repName, isIndex: !!g.isIndex, changePct: g.changePct, market })
     if (fb) {
       a = fb
       await patchDoc(token, pid, `briefs/${encodeURIComponent(`${g.priceSymbol}__${dateStr}`)}`, {
-        priceSymbol: g.priceSymbol, date: dateStr, session, ...fb, at: Date.now(),
+        priceSymbol: g.priceSymbol, date: dateStr, session, ...fb, explainedPct: round2(g.changePct), at: Date.now(),
       }).catch((err) => logEvent('error', { stage: 'store-brief', symbol: g.priceSymbol, error: String(err) }))
     }
   }
-  if (!g.isOther) await refreshPeriods(token, pid, g, keys) // no Yahoo series for manual-price stocks
   return a
 }
 
-// Week/month period data + explanations. Explanations are keyed by the exact window (symbol +
-// period + start/end dates), so a stale text is never re-served for a new window.
-async function refreshPeriods(token, pid, g, keys) {
+// One period (week or month) of `periods/{symbol}`: data + explanation. Explanations are keyed by
+// the exact window (symbol + period + start/end dates), so a stale text is never re-served for a
+// new window. Only that period's field is written, so week and month can run in parallel.
+async function refreshPeriod(env, { g, period }) {
+  const { token, pid } = await firestore(env)
   const ps = g.priceSymbol
-  try {
-    const existing = await getDoc(token, pid, `periods/${encodeURIComponent(ps)}`).catch(() => null)
-    const { doc } = await buildPeriodsDoc({ symbol: ps, nameHe: g.repName || ps, keys, existing, fetchSnapshot, explainMove, sleep: () => sleep(4500) })
-    await patchDoc(token, pid, `periods/${encodeURIComponent(ps)}`, doc)
-  } catch (e) {
-    logEvent('error', { stage: 'store-periods', symbol: ps, error: String(e) })
-  }
+  const path = `periods/${encodeURIComponent(ps)}`
+  const existing = await getDoc(token, pid, path).catch(() => null)
+  const { doc } = await buildPeriodsDoc({ symbol: ps, nameHe: g.repName || ps, keys: llmKeys(env), existing, fetchSnapshot, explainMove, periods: [period] })
+  if (!doc[period]) return
+  await patchDoc(token, pid, path, doc, { mask: ['symbol', 'market', 'updatedAt', period] })
 }
 
 // On-demand generation for a single instrument (when a user just added it) — today's brief +
@@ -256,7 +269,7 @@ async function primeSymbol(env, symbol, nameHe, isIndex) {
   if (!symbol.startsWith('X-')) { try { snap = await fetchSnapshot(symbol) } catch { /* ignore */ } }
   const changePct = snap?.changePct ?? null
   const isOther = symbol.startsWith('X-')
-  await refreshSymbol(env, { g: { priceSymbol: symbol, repName: nameHe, isIndex, isOther, symbol: isIndex ? '' : symbol, changePct, series: snap?.series || [], base: snap?.previousClose ?? null, useChange: true }, session, dateStr })
+  await refreshSymbol(env, { g: { priceSymbol: symbol, repName: nameHe, isIndex, isOther, symbol: isIndex ? '' : symbol, changePct, useChange: true }, session, dateStr })
 }
 
 function cors(origin) {
@@ -416,4 +429,5 @@ export class Jobs extends WorkerEntrypoint {
   explainMover(args) { return explainMover(this.env, args) }
   refreshChunk(args) { return refreshChunk(this.env, args) }
   refreshSymbol(args) { return refreshSymbol(this.env, args) }
+  refreshPeriod(args) { return refreshPeriod(this.env, args) }
 }

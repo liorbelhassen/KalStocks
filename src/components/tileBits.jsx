@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { isPeriodCurrent, marketTz } from '../../lib/periods'
+import { isPeriodCurrent } from '../../lib/periods'
 import { META_RE } from '../../lib/validate'
 import { measuredAnalysis } from '../../lib/analysis'
 
@@ -30,7 +30,7 @@ export function periodInsight(p, period, now = Date.now()) {
   const label = period === 'week' ? '📅 השבוע' : '🗓️ החודש'
   if (!isPeriodCurrent(p, now)) return { text: 'הנתונים לתקופה זו עדיין לא עודכנו — הם יופיעו אחרי העדכון הבא.', confidence: null, sources: [], label }
   if (p.explanation && p.verdict && !META_RE.test(p.explanation)) return { text: p.explanation, confidence: p.confidence, sources: p.sources || [], label }
-  const text = measuredAnalysis({ subject: 'הנייר', changePct: p.changePct ?? 0, period, series: p.series, tz: marketTz(p.market) })
+  const text = measuredAnalysis({ subject: 'הנייר', market: p.market, changePct: p.changePct ?? 0, period })
   return { text, confidence: null, sources: [], label }
 }
 

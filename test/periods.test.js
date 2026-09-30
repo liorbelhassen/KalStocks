@@ -131,7 +131,7 @@ test('buildPeriodsDoc: reuses explanation for the same window, regenerates for a
   // LLM failure on a ≥0.5% move: a measured-data analysis is written, the numbers are still written, other period unaffected.
   const failing = async (input) => { if (input.period === 'week') throw Object.assign(new Error('boom'), { stage: 'llm' }); return explainMove(input) }
   const failed = await buildPeriodsDoc({ symbol: 'POLI.TA', nameHe: 'בנק הפועלים', now: NOW + 2 * 86400000, keys: {}, existing: null, fetchSnapshot, explainMove: failing })
-  assert.ok(failed.doc.week.explanation.startsWith('בנק הפועלים עלתה 10.00% בשבוע האחרון'))
+  assert.ok(failed.doc.week.explanation.startsWith('מניית בנק הפועלים עלתה 10.00% בשבוע האחרון'))
   assert.equal(failed.doc.week.verdict, 'נתונים בלבד')
   assert.equal(failed.doc.week.changePct, 10)
   assert.ok(failed.doc.month.explanation)

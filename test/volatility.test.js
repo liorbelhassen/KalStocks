@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { classify, triggerBand } from '../lib/volatility.js'
+import { classify, triggerBand, briefOutdated } from '../lib/volatility.js'
 
 test('classify: default threshold is 0.5% — a 0.6% day move is significant', () => {
   const c = classify({ changePct: 0.6 })
@@ -33,4 +33,15 @@ test('triggerBand: swing-only move (day band 0) is still level 1; insignificant 
   assert.equal(triggerBand(swing), 1)
   assert.equal(triggerBand(classify({ changePct: 1.6 })), 3)
   assert.equal(triggerBand(classify({ changePct: 0.2 })), 0)
+})
+
+test('briefOutdated: flipped or much larger move re-explains; legacy trigger brief without explainedPct is outdated', () => {
+  assert.equal(briefOutdated({ explainedPct: -0.7, band: 1 }, -0.8), false)
+  assert.equal(briefOutdated({ explainedPct: 0, band: 1 }, -0.69), true)
+  assert.equal(briefOutdated({ explainedPct: -1.11, band: 2 }, -1.29), false)
+  assert.equal(briefOutdated({ explainedPct: 0.6, band: 1 }, -0.6), true)
+  assert.equal(briefOutdated({ explainedPct: 1, band: 2 }, 2.1), true)
+  assert.equal(briefOutdated({ band: 1 }, 0.9), true)
+  assert.equal(briefOutdated({ session: 'morning' }, 0.9), false)
+  assert.equal(briefOutdated(null, 0.9), false)
 })
