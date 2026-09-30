@@ -197,3 +197,9 @@ test('buildPeriodsDoc: a re-research that fails never replaces a checked week te
   assert.equal(again.doc.week.explanation, w.explanation)
   assert.equal(again.doc.week.verdict, 'אושר')
 })
+
+test('isCurrentPeriodEntry: a text that talks about the checker or the draft is not reused', () => {
+  const w = { key: 'K' }
+  const e = { key: 'K', verdict: 'תוקן', explainedPct: 9.47, explanation: 'אל על בלטה בגלל אירוע חריג בטיסת flydubai. שאר הסיפורים בטיוטה לא קיבלו גיבוי מפורש כגורם לתנועה.' }
+  assert.equal(isCurrentPeriodEntry(e, w, 9.47), false)
+})
