@@ -178,6 +178,7 @@ test('hasNewDailyCause: a numbers-only week is re-researched once a checked dail
   const brief = { date: '2026-09-30', at: 2000, explainedPct: 7.93, verdict: 'תוקן', assessment: 'אל על זינקה אחרי התקרית בטיסת פליי דובאי.', sources: [{ name: 'גלובס', url: 'https://www.globes.co.il/news/a' }] }
   assert.equal(hasNewDailyCause(entry, [brief], window), true)
   assert.equal(hasNewDailyCause({ ...entry, at: 3000 }, [brief], window), false)
-  assert.equal(hasNewDailyCause({ ...entry, verdict: 'תוקן' }, [brief], window), false)
+  assert.equal(hasNewDailyCause({ ...entry, verdict: 'תוקן' }, [brief], window, 20), false)
+  assert.equal(hasNewDailyCause({ ...entry, verdict: 'תוקן' }, [brief], window, 9.47), true)
   assert.equal(hasNewDailyCause(entry, [{ ...brief, verdict: 'נתונים בלבד' }], window), false)
 })
