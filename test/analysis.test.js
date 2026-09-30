@@ -56,3 +56,11 @@ test('explainMove: when every AI path fails, a significant move still gets the p
   assert.match(r.explanation, /^מדד דאו ג'ונס ירד 3\.63% בחודש האחרון/)
   assert.deepEqual(r.sources, ['Yahoo Finance'])
 })
+
+test('measuredAnalysis: a period fallback leads with the checked daily cause that made most of the move', async () => {
+  const { dailyArticles } = await import('../lib/research.js')
+  const articles = dailyArticles([{ date: '2026-09-30', explainedPct: 7.93, verdict: 'תוקן', assessment: 'אל על קפצה היום בגלל הדרמה בטיסת flydubai. עוד משפט.', sources: [{ name: 'PassportNews', url: 'https://passportnews.co.il/article/210323' }] }], { startDate: '2026-08-30', endDate: '2026-09-30' })
+  const text = measuredAnalysis({ subject: 'אל על', market: 'IL', changePct: 9.47, period: 'month', articles })
+  assert.ok(text.includes('רוב התנועה הגיעה ב-30.09 (+7.93%): אל על קפצה באותו יום בגלל הדרמה בטיסת flydubai (PassportNews).'), text)
+  assert.ok(!text.includes('2026-09-30'), text)
+})
