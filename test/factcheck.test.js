@@ -74,7 +74,7 @@ test('challengeInsight: a corrected, source-verified text is published with the 
   const calls = mockChecker(openaiOut(verdictText('תוקן', '- החוזים על הנאסד"ק ירדו 0.95% על רקע מימושים בשבבים | https://www.globes.co.il/a', grounded), ['https://www.globes.co.il/a']))
   const r = await challengeInsight(args(bogus), { openaiKey: 'o' })
   assert.equal(r.text, grounded)
-  assert.deepEqual(r.sources, ['globes.co.il', 'Yahoo Finance'])
+  assert.deepEqual(r.sources, [{ name: 'גלובס', url: 'https://www.globes.co.il/a' }, { name: 'Yahoo Finance', url: null }])
   assert.equal(calls[0].body.model, 'gpt-5.4-mini', 'checker runs on an independent model')
   assert.ok(calls[0].body.input.includes(bogus))
 })
@@ -85,7 +85,7 @@ test('challengeInsight: rejected draft → facts-only text for a market-wide mov
   assert.equal(r.verdict, 'נתונים בלבד')
   assert.ok(!/לבנון|איראן/.test(r.text))
   assert.ok(r.text.includes('0.49%') && r.text.includes('וול סטריט'))
-  assert.deepEqual(r.sources, ['Yahoo Finance'])
+  assert.deepEqual(r.sources, [{ name: 'Yahoo Finance', url: null }])
 })
 
 test('challengeInsight: a URL the checker never retrieved does not count as verification', async () => {

@@ -60,7 +60,7 @@ test('challengeInsight: an article cited as #n verifies the claim and shows its 
     moveText: '−0.49%', when: '2026-09-28', periodHe: 'היום', articles, articlesBlock: describeArticles(articles), allowedDomains: ['globes.co.il', 'calcalist.co.il', 'bizportal.co.il'],
   }, { openaiKey: 'o' })
   assert.equal(r.text, final)
-  assert.deepEqual(r.sources, ['calcalist.co.il', 'Yahoo Finance'])
+  assert.deepEqual(r.sources, [{ name: 'כלכליסט', url: 'https://news.google.com/rss/articles/abc' }, { name: 'Yahoo Finance', url: null }])
   assert.deepEqual(calls[0].tools[0].filters.allowed_domains, ['globes.co.il', 'calcalist.co.il', 'bizportal.co.il'])
   assert.ok(calls[0].input.includes('[#1] 2026-09-28 | כלכליסט'))
 })

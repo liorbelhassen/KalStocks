@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { isPeriodCurrent } from '../../lib/periods'
 import { META_RE, LEGACY_TEXT_RE } from '../../lib/validate'
 import { measuredAnalysis } from '../../lib/analysis'
+import { sourceLinks } from '../../lib/sources'
 
 export const fmt = (n) => n.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 export const fmt0 = (n) => n.toLocaleString('he-IL', { maximumFractionDigits: 0 })
@@ -61,4 +62,13 @@ export function tileView(stock, tab) {
   }
   const todayInsight = stock.explanation ? { ...stock.explanation, label: todayLabel(stock.explanation) } : null
   return { pct: stock.changePct, series: stock.series || [], insight: todayInsight, ts: stock.explanation?.ts }
+}
+
+export function SourceLinks({ sources, symbol }) {
+  return sourceLinks(sources, symbol).slice(0, 2).map((s, i) => (
+    <span key={s.name}>
+      {i ? ', ' : ''}
+      {s.url ? <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>{s.name}</a> : s.name}
+    </span>
+  ))
 }

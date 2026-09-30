@@ -189,7 +189,7 @@ async function morningJob(env, { force = null, email = true, only = null } = {})
     .map((w) => {
       const ps = w.priceSymbol || w.symbol
       const a = assessments[ps] || {}
-      return { symbol: w.symbol, nameHe: w.nameHe, kind: w.kind, currency: (w.market || 'IL') === 'US' ? '$' : '₪', isIndex: snaps[ps]?.isIndex, agorot: quotedInAgorot(snaps[ps]), priceIls: snaps[ps]?.priceIls, assessment: a.assessment || 'לא נמצאה הערכה.', sentiment: a.sentiment, confidence: a.confidence, sources: a.sources }
+      return { symbol: w.symbol, priceSymbol: ps, nameHe: w.nameHe, kind: w.kind, currency: (w.market || 'IL') === 'US' ? '$' : '₪', isIndex: snaps[ps]?.isIndex, agorot: quotedInAgorot(snaps[ps]), priceIls: snaps[ps]?.priceIls, assessment: a.assessment || 'לא נמצאה הערכה.', sentiment: a.sentiment, confidence: a.confidence, sources: a.sources }
     })
   const html = buildMorningHtml({ dateStr: ilDateHe(), items: emailItems, session: 'morning' })
   if (env.RESEND_API_KEY && env.DIGEST_TO) {
