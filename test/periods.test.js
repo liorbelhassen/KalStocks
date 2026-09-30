@@ -170,3 +170,14 @@ test('isCurrentPeriodEntry: an old price-path fallback text is not reused', asyn
   assert.equal(isCurrentPeriodEntry(entry, window, 1.67), false)
   assert.equal(isCurrentPeriodEntry({ ...entry, explanation: 'מניית מיקרוסופט עלתה 1.67% בשבוע האחרון, הרבה יותר מהשוק.' }, window, 1.67), true)
 })
+
+test('hasNewDailyCause: a numbers-only week is re-researched once a checked daily cause lands in its window', async () => {
+  const { hasNewDailyCause } = await import('../lib/periods.js')
+  const window = { startDate: '2026-09-23', endDate: '2026-09-30' }
+  const entry = { verdict: 'נתונים בלבד', at: 1000 }
+  const brief = { date: '2026-09-30', at: 2000, explainedPct: 7.93, verdict: 'תוקן', assessment: 'אל על זינקה אחרי התקרית בטיסת פליי דובאי.', sources: [{ name: 'גלובס', url: 'https://www.globes.co.il/news/a' }] }
+  assert.equal(hasNewDailyCause(entry, [brief], window), true)
+  assert.equal(hasNewDailyCause({ ...entry, at: 3000 }, [brief], window), false)
+  assert.equal(hasNewDailyCause({ ...entry, verdict: 'תוקן' }, [brief], window), false)
+  assert.equal(hasNewDailyCause(entry, [{ ...brief, verdict: 'נתונים בלבד' }], window), false)
+})
