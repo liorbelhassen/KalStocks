@@ -182,3 +182,18 @@ test('hasNewDailyCause: a numbers-only week is re-researched once a checked dail
   assert.equal(hasNewDailyCause({ ...entry, verdict: 'תוקן' }, [brief], window, 9.47), true)
   assert.equal(hasNewDailyCause(entry, [{ ...brief, verdict: 'נתונים בלבד' }], window), false)
 })
+
+test('buildPeriodsDoc: a re-research that fails never replaces a checked week text with numbers only', async () => {
+  const { buildPeriodsDoc } = await import('../lib/periods.js')
+  const fetchSnapshot = async () => ({ priceIls: 110, previousClose: 100, at: NOW, series: [{ t: NOW, v: 110 }] })
+  const ok = async (input) => ({ explanation: `${goodHe} (${input.period})`, confidence: 'גבוהה', sources: [], provider: 'test', verdict: 'אושר' })
+  const first = await buildPeriodsDoc({ symbol: 'POLI.TA', nameHe: 'בנק הפועלים', now: NOW, keys: {}, existing: null, fetchSnapshot, explainMove: ok, periods: ['week'] })
+  const w = first.doc.week
+  const brief = { date: w.endDate, at: NOW + 1000, explainedPct: 8, verdict: 'תוקן', assessment: 'הבנק זינק אחרי דיווח.', sources: [{ name: 'גלובס', url: 'https://www.globes.co.il/news/a' }] }
+  let calls = 0
+  const failing = async () => { calls++; throw Object.assign(new Error('rejected'), { stage: 'factcheck' }) }
+  const again = await buildPeriodsDoc({ symbol: 'POLI.TA', nameHe: 'בנק הפועלים', now: NOW + 3600000, keys: {}, existing: first.doc, fetchSnapshot, explainMove: failing, periods: ['week'], dailyBriefs: [brief] })
+  assert.equal(calls, 1)
+  assert.equal(again.doc.week.explanation, w.explanation)
+  assert.equal(again.doc.week.verdict, 'אושר')
+})
