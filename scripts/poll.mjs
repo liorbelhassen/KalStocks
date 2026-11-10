@@ -135,7 +135,8 @@ async function main() {
         geminiCalls++
         const market = marketOf(ev.priceSymbol || ev.symbol)
         const news = buildNewsContext(headlines, { market, nameHe: ev.nameHe, symbol: ev.priceSymbol || ev.symbol })
-        const r = await explainMove({ ...ev, market, newsContext: news }, keys)
+        // Facts/news are fetched for the instrument that actually trades (an ETF's priceSymbol is its index).
+        const r = await explainMove({ ...ev, symbol: ev.priceSymbol || ev.symbol, market, newsContext: news }, keys)
         await db.collection('explanations').doc(d.id).set({
           symbol: ev.symbol,
           nameHe: ev.nameHe,
@@ -144,8 +145,9 @@ async function main() {
           direction: ev.direction,
           explanation: r.explanation,
           confidence: r.confidence,
-          sources: r.sources,
+          sources: r.sources || [],
           model: r.provider,
+          verdict: r.verdict || null, // the dashboard only shows fact-checked explanations (verdict set)
           at: Date.now(),
         })
         await d.ref.update({ needsExplanation: false, explainedAt: Date.now() })

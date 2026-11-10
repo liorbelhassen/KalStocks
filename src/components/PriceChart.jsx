@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { ComposedChart, Area, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 // A professional price chart: price area (right axis) + volume bars (hidden left axis), with a
@@ -35,13 +36,15 @@ function ChartTip({ active, payload, period, currency, isIndex }) {
 }
 
 export default function PriceChart({ series = [], period = 'today', color = 'var(--up)', currency = '₪', isIndex = false, height = 110 }) {
+  // Unique per chart instance: tiles of the same market share the same first timestamp, and a duplicated
+  // SVG gradient id made every chart reuse the first tile's (possibly opposite-colour) gradient.
+  const gid = `pc-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
   const data = (series || []).filter((p) => p && p.v != null)
   if (data.length < 2) {
     return <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-dim)', fontSize: 11.5 }}>אין מספיק נתונים לגרף</div>
   }
   const hasVol = data.some((p) => p.vol != null && p.vol > 0)
   const maxVol = Math.max(...data.map((p) => p.vol || 0), 1)
-  const gid = `pc-${Math.round(data[0].t)}-${period}`
 
   return (
     <div style={{ width: '100%', height }}>

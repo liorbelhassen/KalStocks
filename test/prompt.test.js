@@ -81,7 +81,7 @@ test('validateInsight: rejects empty / short / long / English / generic / templa
   assert.equal(validateInsight('').reason, 'empty')
   assert.equal(validateInsight(null).reason, 'empty')
   assert.equal(validateInsight('המניה ירדה.').reason, 'too-short')
-  assert.equal(validateInsight(good.repeat(3)).reason, 'too-long')
+  assert.equal(validateInsight(good.repeat(Math.ceil(MAX_INSIGHT_LEN / good.length) + 1)).reason, 'too-long')
   assert.equal(validateInsight('Apple shares fell after the company reported weaker than expected iPhone sales in China, and analysts cut their price targets.').reason, 'not-hebrew')
   assert.equal(validateInsight(`${good} מומלץ לעקוב אחרי ההתפתחויות.`).reason, 'generic')
   assert.equal(validateInsight('לא נמצא מידע ספציפי על המניה היום, אולם ייתכן שהתנועה קשורה למגמה הכללית בשוק ולציפיות המשקיעים לגבי הריבית.').reason, 'generic')

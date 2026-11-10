@@ -10,7 +10,8 @@ import { diagnoseMove, BENCHMARK_LABELS } from '../lib/market'
 import { briefOutdated } from '../lib/volatility'
 import { LEGACY_TEXT_RE } from '../lib/validate'
 import { subscribeWatchlist, addToWatchlist, removeFromWatchlist, updateThreshold, updateQuantity, updatePrice, adoptLegacyWatchlist } from './services/watchlist'
-import { analyzeScreenshot, quoteSymbol, searchYahoo, resolveSymbol, primeInstrument } from './services/vision'
+import { analyzeScreenshot, quoteSymbol, quotePeriod, searchYahoo, resolveSymbol, primeInstrument } from './services/vision'
+import { isPeriodCurrent } from '../lib/periods'
 import { subscribeAuth, signOutUser } from './services/auth'
 import Login from './components/Login'
 
@@ -22,6 +23,23 @@ import { subscribePeriods } from './services/periods'
 
 const todayIsrael = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date())
 
+const BENCH_LABEL = { 'TA35.TA': 'מדד ת"א 35', '^GSPC': 'S&P 500', '^IXIC': 'נאסד"ק' }
+
+// Stored (AI-analysed) period entry when it is current; otherwise the live numbers; otherwise whatever
+// explains the gap (stored error / stale entry) so the tile can show a clear message.
+function mergePeriods(stored, live) {
+  if (!stored && !live) return null
+  const out = { ...(stored || {}) }
+  for (const period of ['week', 'month']) {
+    const s = stored?.[period]
+    const l = live?.[period]
+    const sOk = s?.changePct != null && isPeriodCurrent(s)
+    const lOk = l?.changePct != null && isPeriodCurrent(l)
+    out[period] = sOk ? s : lOk ? l : s || l || null
+  }
+  return out
+}
+
 export default function App() {
   const [user, setUser] = useState(null)
   const [authReady, setAuthReady] = useState(false)
@@ -31,6 +49,9 @@ export default function App() {
   const [briefs, setBriefs] = useState({})
   const [periods, setPeriods] = useState({}) // week/month data per priceSymbol (daily)
   const [liveQuotes, setLiveQuotes] = useState({}) // instant Worker quotes until the poller persists them
+  const [livePeriods, setLivePeriods] = useState({}) // client fallback: week/month numbers fetched live when the stored doc is missing/stale
+  const livePeriodReq = useRef(new Set())
+  const [periodsReady, setPeriodsReady] = useState(false)
   const [error, setError] = useState(null)
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
@@ -72,7 +93,7 @@ export default function App() {
     const unsubS = subscribeSnapshots(setSnapshots, (e) => setError(e.message))
     const unsubE = subscribeExplanations(setExplanations, (e) => setError(e.message))
     const unsubB = subscribeBriefs(setBriefs, (e) => setError(e.message))
-    const unsubP = subscribePeriods(setPeriods, (e) => setError(e.message))
+    const unsubP = subscribePeriods((d) => { setPeriods(d); setPeriodsReady(true) }, (e) => setError(e.message))
     return () => {
       unsubW()
       unsubS()
@@ -101,6 +122,24 @@ export default function App() {
   }, [q, open])
 
   // Auth gate — nothing below renders until we know who (if anyone) is signed in.
+  // Client fallback: any watched symbol whose stored week/month entry is missing or out of date gets its
+  // numbers fetched live (once per symbol/period/day), so a new or failed symbol never shows a blank tab.
+  useEffect(() => {
+    if (!user || !periodsReady) return
+    for (const w of watchlist) {
+      const ps = w.priceSymbol || w.symbol
+      if (!ps || w.kind === 'other' || ps.startsWith('X-')) continue
+      for (const period of ['week', 'month']) {
+        const stored = periods[ps]?.[period]
+        if (stored?.changePct != null && isPeriodCurrent(stored)) continue
+        const k = `${ps}|${period}|${ilDate}`
+        if (livePeriodReq.current.has(k)) continue
+        livePeriodReq.current.add(k)
+        quotePeriod(ps, period).then((p) => setLivePeriods((prev) => ({ ...prev, [ps]: { ...prev[ps], [period]: p } })))
+      }
+    }
+  }, [user, watchlist, periods, periodsReady, ilDate])
+
   if (!authReady) {
     return (
       <div dir="rtl" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-dim)' }}>
@@ -140,7 +179,8 @@ export default function App() {
       setOpen(false)
       const ps = item.priceSymbol || item.symbol
       loadQuote(ps) // instant price, don't wait for the poller
-      primeInstrument(ps, item.nameHe, item.kind === 'index') // generate reviews now, not at morning
+      // generate reviews now, not at morning — unless the shared price symbol (e.g. TA35 for an ETF) already has them
+      if (!(periods[ps] && briefs[ps]?.verdict)) primeInstrument(ps, item.nameHe, item.kind === 'index')
     } catch (err) {
       setError(err.message)
     }
@@ -219,6 +259,7 @@ export default function App() {
     const hhmm = (ms) => (ms ? new Date(ms).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) : '')
     // Priority: significant-event AI explanation → morning AI brief → a data-derived baseline
     // (so every instrument — indices included — always shows an insight, upgraded to AI when available).
+    // Data-only (labelled as such in the tile): today's change, intraday range and the reference index.
     const dataInsight = () => {
       const c = snap?.changePct
       if (c == null) return null
@@ -258,7 +299,8 @@ export default function App() {
       changePct: snap?.changePct,
       series: snap?.series || [],
       explanation: insight,
-      periods: periods[priceSym] || null,
+      manualOnly: w.kind === 'other' || String(priceSym).startsWith('X-'),
+      periods: mergePeriods(periods[priceSym], livePeriods[priceSym]),
     }
   })
 

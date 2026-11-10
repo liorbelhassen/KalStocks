@@ -12,7 +12,7 @@ import { askWithSearch } from '../lib/llm.js'
 import { classify, triggerBand, briefOutdated, keepCheckedBrief } from '../lib/volatility.js'
 import { quotedInAgorot } from '../lib/quote.js'
 import { fetchHeadlines, buildNewsContext } from '../lib/telegram.js'
-import { buildPeriodsDoc, marketOf, marketTz } from '../lib/periods.js'
+import { buildPeriodsDoc, marketOf, marketTz, computePeriod, periodBenchmark } from '../lib/periods.js'
 import { logEvent } from '../lib/validate.js'
 import { measuredAnalysis } from '../lib/analysis.js'
 import { fetchProfile, hebrewName } from '../lib/research.js'
@@ -109,7 +109,7 @@ const measuredBrief = ({ nameHe, isIndex, changePct, market }) => {
     : null
   return text && { assessment: text, sentiment: changePct > 0 ? 'חיובי' : 'שלילי', confidence: 'נמוכה', sources: [], verdict: 'נתונים בלבד' }
 }
-const headlines = () => fetchHeadlines().catch(() => [])
+const headlines = () => fetchHeadlines().catch((e) => { logEvent('error', { stage: 'news', error: String(e) }); return [] })
 
 // TASE securities added under Yahoo's English name ("EL AL ISRAEL AIRLI") are researched and
 // described by their Hebrew press name ("אל על"), resolved once and cached in `names/{symbol}`.
@@ -212,11 +212,12 @@ async function morningJob(env, { force = null, email = true, only = null } = {})
     })
   const html = buildMorningHtml({ dateStr: ilDateHe(), items: emailItems, session: 'morning' })
   if (env.RESEND_API_KEY && env.DIGEST_TO) {
-    await fetch('https://api.resend.com/emails', {
+    const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ from: env.DIGEST_FROM || 'StocksInsights <onboarding@resend.dev>', to: env.DIGEST_TO, subject: `☀️ סקירת בוקר StocksInsights · ${dateStr}`, html }),
-    })
+    }).catch((e) => ({ ok: false, status: 0, text: async () => String(e) }))
+    if (!res.ok) logEvent('error', { stage: 'email', status: res.status, error: (await res.text().catch(() => '')).slice(0, 200) })
   }
   console.log('morning job done', JSON.stringify(summary))
   return summary
@@ -406,6 +407,12 @@ export default {
       if (body.action === 'quote') {
         if (!body.symbol) return json({ error: 'missing symbol' }, 400, origin)
         try {
+          if (body.period === 'week' || body.period === 'month') {
+            // Client fallback when the stored week/month entry is missing or out of date: numbers only, no LLM.
+            const { window, snap, changePct } = await computePeriod(body.symbol, body.period, { fetchSnapshot })
+            const benchmark = await periodBenchmark(body.symbol, body.period, window, { fetchSnapshot })
+            return json({ period: { key: window.key, startDate: window.startDate, endDate: window.endDate, market: window.market, changePct: Math.round(changePct * 100) / 100, series: snap.series || [], benchmark, live: true } }, 200, origin)
+          }
           const snapshot = await fetchSnapshot(body.symbol)
           return json({ snapshot }, 200, origin)
         } catch (e) {
