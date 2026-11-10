@@ -128,14 +128,20 @@ test('buildPeriodsDoc: reuses explanation for the same window, regenerates for a
   assert.equal(llmCalls, 4)
   assert.notEqual(next.doc.week.key, first.doc.week.key)
 
-  // LLM failure: explanation is null (not a placeholder string), the numbers are still written, other period unaffected.
+  // LLM failure on a ≥0.5% move: a measured-data analysis is written, the numbers are still written, other period unaffected.
   const failing = async (input) => { if (input.period === 'week') throw Object.assign(new Error('boom'), { stage: 'llm' }); return explainMove(input) }
   const failed = await buildPeriodsDoc({ symbol: 'POLI.TA', nameHe: 'בנק הפועלים', now: NOW + 2 * 86400000, keys: {}, existing: null, fetchSnapshot, explainMove: failing })
-  assert.equal(failed.doc.week.explanation, null)
+  assert.ok(failed.doc.week.explanation.startsWith('מניית בנק הפועלים עלתה 10.00% בשבוע האחרון'))
+  assert.equal(failed.doc.week.verdict, 'נתונים בלבד')
   assert.equal(failed.doc.week.changePct, 10)
   assert.ok(failed.doc.month.explanation)
   assert.equal(failed.errors.length, 1)
   assert.deepEqual([failed.errors[0].stage, failed.errors[0].symbol, failed.errors[0].period], ['llm', 'POLI.TA', 'week'])
+
+  // Below 0.5% there is nothing to explain: failure leaves the explanation empty.
+  const flat = async () => ({ priceIls: 100.2, previousClose: 100, at: NOW, series: [{ t: NOW, v: 100.2 }] })
+  const quiet = await buildPeriodsDoc({ symbol: 'POLI.TA', nameHe: 'בנק הפועלים', now: NOW, keys: {}, existing: null, fetchSnapshot: flat, explainMove: failing })
+  assert.equal(quiet.doc.week.explanation, null)
 })
 
 test('isPeriodCurrent: window ending recently is current; old or unkeyed entries are stale', () => {
@@ -145,4 +151,55 @@ test('isPeriodCurrent: window ending recently is current; old or unkeyed entries
   assert.equal(isPeriodCurrent({ endDate: '2026-07-09' }, now), false)
   assert.equal(isPeriodCurrent({ changePct: 3.1, explanation: 'x' }, now), false)
   assert.equal(isPeriodCurrent(null, now), false)
+})
+
+test('isCurrentPeriodEntry: a text written for a different move or leaking checker commentary is not reused', () => {
+  const w = { key: 'K' }
+  const e = { key: 'K', explanation: 'המדד ירד 1.10% בשבוע האחרון.', verdict: 'נתונים בלבד', explainedPct: -1.1 }
+  assert.equal(isCurrentPeriodEntry(e, w, -1.2), true)
+  assert.equal(isCurrentPeriodEntry(e, w, 1.17), false)
+  assert.equal(isCurrentPeriodEntry({ ...e, explainedPct: undefined }, w, -1.1), false)
+  assert.equal(isCurrentPeriodEntry({ ...e, explanation: 'לא אומת בסיס לדוחות מאכזבים' }, w), false)
+})
+
+
+test('isCurrentPeriodEntry: an old price-path fallback text is not reused', async () => {
+  const { isCurrentPeriodEntry } = await import('../lib/periods.js')
+  const window = { key: 'MSFT__week__2026-09-23_2026-09-30' }
+  const entry = { key: window.key, verdict: 'נתונים בלבד', explainedPct: 1.67, explanation: 'מיקרוסופט עלתה 1.67% בשבוע האחרון. באותה תקופה: S&P 500 −0.46%; לעומת S&P 500 (−0.46%) — כלומר תנועה ייחודית לנייר. הנקודה הגבוהה נרשמה ב-25.09.' }
+  assert.equal(isCurrentPeriodEntry(entry, window, 1.67), false)
+  assert.equal(isCurrentPeriodEntry({ ...entry, explanation: 'מניית מיקרוסופט עלתה 1.67% בשבוע האחרון, הרבה יותר מהשוק.' }, window, 1.67), true)
+})
+
+test('hasNewDailyCause: a numbers-only week is re-researched once a checked daily cause lands in its window', async () => {
+  const { hasNewDailyCause } = await import('../lib/periods.js')
+  const window = { startDate: '2026-09-23', endDate: '2026-09-30' }
+  const entry = { verdict: 'נתונים בלבד', at: 1000 }
+  const brief = { date: '2026-09-30', at: 2000, explainedPct: 7.93, verdict: 'תוקן', assessment: 'אל על זינקה אחרי התקרית בטיסת פליי דובאי.', sources: [{ name: 'גלובס', url: 'https://www.globes.co.il/news/a' }] }
+  assert.equal(hasNewDailyCause(entry, [brief], window), true)
+  assert.equal(hasNewDailyCause({ ...entry, at: 3000 }, [brief], window), false)
+  assert.equal(hasNewDailyCause({ ...entry, verdict: 'תוקן' }, [brief], window, 20), false)
+  assert.equal(hasNewDailyCause({ ...entry, verdict: 'תוקן' }, [brief], window, 9.47), true)
+  assert.equal(hasNewDailyCause(entry, [{ ...brief, verdict: 'נתונים בלבד' }], window), false)
+})
+
+test('buildPeriodsDoc: a re-research that fails never replaces a checked week text with numbers only', async () => {
+  const { buildPeriodsDoc } = await import('../lib/periods.js')
+  const fetchSnapshot = async () => ({ priceIls: 110, previousClose: 100, at: NOW, series: [{ t: NOW, v: 110 }] })
+  const ok = async (input) => ({ explanation: `${goodHe} (${input.period})`, confidence: 'גבוהה', sources: [], provider: 'test', verdict: 'אושר' })
+  const first = await buildPeriodsDoc({ symbol: 'POLI.TA', nameHe: 'בנק הפועלים', now: NOW, keys: {}, existing: null, fetchSnapshot, explainMove: ok, periods: ['week'] })
+  const w = first.doc.week
+  const brief = { date: w.endDate, at: NOW + 1000, explainedPct: 8, verdict: 'תוקן', assessment: 'הבנק זינק אחרי דיווח.', sources: [{ name: 'גלובס', url: 'https://www.globes.co.il/news/a' }] }
+  let calls = 0
+  const failing = async () => { calls++; throw Object.assign(new Error('rejected'), { stage: 'factcheck' }) }
+  const again = await buildPeriodsDoc({ symbol: 'POLI.TA', nameHe: 'בנק הפועלים', now: NOW + 3600000, keys: {}, existing: first.doc, fetchSnapshot, explainMove: failing, periods: ['week'], dailyBriefs: [brief] })
+  assert.equal(calls, 1)
+  assert.equal(again.doc.week.explanation, w.explanation)
+  assert.equal(again.doc.week.verdict, 'אושר')
+})
+
+test('isCurrentPeriodEntry: a text that talks about the checker or the draft is not reused', () => {
+  const w = { key: 'K' }
+  const e = { key: 'K', verdict: 'תוקן', explainedPct: 9.47, explanation: 'אל על בלטה בגלל אירוע חריג בטיסת flydubai. שאר הסיפורים בטיוטה לא קיבלו גיבוי מפורש כגורם לתנועה.' }
+  assert.equal(isCurrentPeriodEntry(e, w, 9.47), false)
 })

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseGoogleNews, fetchArticles, describeArticles, searchPhrase, timeFilter } from '../lib/ilnews.js'
+import { parseGoogleNews, fetchArticles, describeArticles, searchPhrase, timeFilter, contextArticles } from '../lib/ilnews.js'
 import { challengeInsight } from '../lib/factcheck.js'
 import { diagnoseMove } from '../lib/market.js'
 
@@ -60,7 +60,19 @@ test('challengeInsight: an article cited as #n verifies the claim and shows its 
     moveText: '−0.49%', when: '2026-09-28', periodHe: 'היום', articles, articlesBlock: describeArticles(articles), allowedDomains: ['globes.co.il', 'calcalist.co.il', 'bizportal.co.il'],
   }, { openaiKey: 'o' })
   assert.equal(r.text, final)
-  assert.deepEqual(r.sources, ['calcalist.co.il', 'Yahoo Finance'])
+  assert.deepEqual(r.sources, [{ name: 'כלכליסט', url: 'https://news.google.com/rss/articles/abc' }, { name: 'Yahoo Finance', url: null }])
   assert.deepEqual(calls[0].tools[0].filters.allowed_domains, ['globes.co.il', 'calcalist.co.il', 'bizportal.co.il'])
   assert.ok(calls[0].input.includes('[#1] 2026-09-28 | כלכליסט'))
 })
+
+test('searchPhrase: US indices are searched by name, so "DJI" drones never match the Dow', () => {
+  const p = searchPhrase({ symbol: '^DJI', market: 'US', isIndex: true })
+  assert.equal(p.query, '"Dow Jones"')
+  assert.equal(p.relevant('DJI Neo 3 Leak: New Body'), false)
+  assert.equal(p.relevant('Dow falls 500 points as yields jump'), true)
+  const a = [{ title: 'x', host: 'reuters.com' }, { title: 'y', host: 'tech-ish.com' }]
+  assert.deepEqual(contextArticles(a, 'US').map((x) => x.host), ['reuters.com'])
+  assert.equal(contextArticles(a, 'IL').length, 2)
+  assert.equal(contextArticles([{ title: 'AMAT,NVDA | Stock Prices | Quote Comparison - Yahoo Finance', host: 'finance.yahoo.com' }], 'US').length, 0)
+})
+
