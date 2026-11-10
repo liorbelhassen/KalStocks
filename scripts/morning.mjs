@@ -63,7 +63,8 @@ async function main() {
     if (w.symbol === ps) groups.get(ps).repName = w.nameHe // describe the group by the instrument that IS the price symbol
   }
 
-  const headlines = await fetchHeadlines() // real-time headlines to ground insights (anti-hallucination)
+  // real-time headlines to ground insights (anti-hallucination); a news outage must not abort the run
+  const headlines = await fetchHeadlines().catch((e) => { logEvent('error', { stage: 'news', error: String(e) }); return [] })
   const assessments = {}
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
   let geminiCalls = 0
@@ -92,6 +93,7 @@ async function main() {
       sentiment: a.sentiment,
       confidence: a.confidence,
       sources: a.sources || [],
+      verdict: a.verdict || null, // the dashboard only shows fact-checked briefs (verdict set)
       at: Date.now(),
     })
     briefWrites++
@@ -103,7 +105,8 @@ async function main() {
   {
     const priceSyms = new Set()
     items.forEach((w) => {
-      if (w.kind !== 'other') priceSyms.add(w.priceSymbol || w.symbol)
+      const ps = w.priceSymbol || w.symbol
+      if (w.kind !== 'other' && !String(ps).startsWith('X-')) priceSyms.add(ps) // manual-price: no Yahoo history
     })
     let periodCalls = 0
     for (const ps of priceSyms) {

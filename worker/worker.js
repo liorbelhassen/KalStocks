@@ -12,7 +12,7 @@ import { askWithSearch } from '../lib/llm.js'
 import { classify, triggerBand } from '../lib/volatility.js'
 import { quotedInAgorot } from '../lib/quote.js'
 import { fetchHeadlines, buildNewsContext } from '../lib/telegram.js'
-import { buildPeriodsDoc, marketOf } from '../lib/periods.js'
+import { buildPeriodsDoc, marketOf, computePeriod, periodBenchmark } from '../lib/periods.js'
 import { logEvent } from '../lib/validate.js'
 
 const ALLOWED = ['https://kalstocks1.web.app', 'http://localhost:5175', 'http://localhost:5173']
@@ -97,7 +97,8 @@ async function pollChunk(env, { items, dateStr, session }) {
 async function explainMover(env, { priceSymbol: ps, nameHe, isIndex, changePct, band, dateStr, session }) {
   const { token, pid } = await firestore(env)
   const market = marketOf(ps)
-  const news = buildNewsContext(await fetchHeadlines(), { market, nameHe, symbol: ps })
+  const headlines = await fetchHeadlines().catch((e) => { logEvent('error', { stage: 'news', error: String(e) }); return [] })
+  const news = buildNewsContext(headlines, { market, nameHe, symbol: ps })
   const a = await assessOpen({ nameHe, symbol: isIndex ? '' : ps, priceSymbol: ps, market, date: dateStr, isIndex, session, changePct, newsContext: news }, llmKeys(env))
   await patchDoc(token, pid, `briefs/${encodeURIComponent(`${ps}__${dateStr}`)}`, {
     priceSymbol: ps, date: dateStr, session, band, assessment: a.assessment, sentiment: a.sentiment, confidence: a.confidence, sources: a.sources || [], verdict: a.verdict, at: Date.now(),
@@ -165,11 +166,12 @@ async function morningJob(env, { force = null, email = true, only = null } = {})
     })
   const html = buildMorningHtml({ dateStr: ilDateHe(), items: emailItems, session: 'morning' })
   if (env.RESEND_API_KEY && env.DIGEST_TO) {
-    await fetch('https://api.resend.com/emails', {
+    const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ from: env.DIGEST_FROM || 'StocksInsights <onboarding@resend.dev>', to: env.DIGEST_TO, subject: `☀️ סקירת בוקר StocksInsights · ${dateStr}`, html }),
-    })
+    }).catch((e) => ({ ok: false, status: 0, text: async () => String(e) }))
+    if (!res.ok) logEvent('error', { stage: 'email', status: res.status, error: (await res.text().catch(() => '')).slice(0, 200) })
   }
   console.log('morning job done', JSON.stringify(summary))
   return summary
@@ -186,6 +188,12 @@ async function refreshChunk(env, { groups, session, dateStr }) {
       logEvent('error', { stage: 'refresh-symbol', symbol: g.priceSymbol, error: String(e) })
     }
     await sleep(4500)
+    // Separate invocation: brief + both periods together exceed the 50-subrequest budget, which made
+    // the periods silently fail (no week/month data) for whole chunks.
+    if (!g.isOther) {
+      await env.JOBS.refreshPeriods({ g }).catch((e) => logEvent('error', { stage: 'store-periods', symbol: g.priceSymbol, error: String(e) }))
+      await sleep(4500)
+    }
   }
   return out
 }
@@ -195,7 +203,8 @@ async function refreshSymbol(env, { g, session, dateStr }) {
   const { token, pid } = await firestore(env)
   const keys = llmKeys(env)
   const market = marketOf(g.priceSymbol)
-  const news = buildNewsContext(await fetchHeadlines(), { market, nameHe: g.repName, symbol: g.priceSymbol }) // real headlines (anti-hallucination)
+  const headlines = await fetchHeadlines().catch((e) => { logEvent('error', { stage: 'news', error: String(e) }); return [] })
+  const news = buildNewsContext(headlines, { market, nameHe: g.repName, symbol: g.priceSymbol }) // real headlines (anti-hallucination)
   let a = null
   try {
     a = await assessOpen({ nameHe: g.repName, symbol: g.symbol, priceSymbol: g.priceSymbol, market, date: dateStr, isIndex: !!g.isIndex, session, changePct: session === 'midday' || g.useChange ? g.changePct : null, newsContext: news }, keys)
@@ -205,13 +214,15 @@ async function refreshSymbol(env, { g, session, dateStr }) {
   } catch (e) {
     logEvent('warn', { stage: e.stage || 'brief', symbol: g.priceSymbol, period: 'day', session, error: e.message })
   }
-  if (!g.isOther) await refreshPeriods(token, pid, g, keys) // no Yahoo series for manual-price stocks
   return a
 }
 
 // Week/month period data + explanations. Explanations are keyed by the exact window (symbol +
 // period + start/end dates), so a stale text is never re-served for a new window.
-async function refreshPeriods(token, pid, g, keys) {
+async function refreshPeriods(env, { g }) {
+  if (g.isOther) return // no Yahoo series for manual-price stocks — the UI says so explicitly
+  const { token, pid } = await firestore(env)
+  const keys = llmKeys(env)
   const ps = g.priceSymbol
   try {
     const existing = await getDoc(token, pid, `periods/${encodeURIComponent(ps)}`).catch(() => null)
@@ -231,7 +242,9 @@ async function primeSymbol(env, symbol, nameHe, isIndex) {
   let changePct = null
   if (!symbol.startsWith('X-')) { try { changePct = (await fetchSnapshot(symbol)).changePct } catch { /* ignore */ } }
   const isOther = symbol.startsWith('X-')
-  await refreshSymbol(env, { g: { priceSymbol: symbol, repName: nameHe, isIndex, isOther, symbol: isIndex ? '' : symbol, changePct, useChange: true }, session, dateStr })
+  const g = { priceSymbol: symbol, repName: nameHe, isIndex, isOther, symbol: isIndex ? '' : symbol, changePct, useChange: true }
+  await env.JOBS.refreshSymbol({ g, session, dateStr })
+  if (!isOther) await env.JOBS.refreshPeriods({ g })
 }
 
 function cors(origin) {
@@ -338,6 +351,12 @@ export default {
       if (body.action === 'quote') {
         if (!body.symbol) return json({ error: 'missing symbol' }, 400, origin)
         try {
+          if (body.period === 'week' || body.period === 'month') {
+            // Client fallback when the stored week/month entry is missing or out of date: numbers only, no LLM.
+            const { window, snap, changePct } = await computePeriod(body.symbol, body.period, { fetchSnapshot })
+            const benchmark = await periodBenchmark(body.symbol, body.period, window, { fetchSnapshot })
+            return json({ period: { key: window.key, startDate: window.startDate, endDate: window.endDate, market: window.market, changePct: Math.round(changePct * 100) / 100, series: snap.series || [], benchmark, live: true } }, 200, origin)
+          }
           const snapshot = await fetchSnapshot(body.symbol)
           return json({ snapshot }, 200, origin)
         } catch (e) {
@@ -391,4 +410,5 @@ export class Jobs extends WorkerEntrypoint {
   explainMover(args) { return explainMover(this.env, args) }
   refreshChunk(args) { return refreshChunk(this.env, args) }
   refreshSymbol(args) { return refreshSymbol(this.env, args) }
+  refreshPeriods(args) { return refreshPeriods(this.env, args) }
 }

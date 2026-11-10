@@ -27,6 +27,23 @@ export async function quoteSymbol(symbol) {
   }
 }
 
+// Live week/month numbers (no AI) for a symbol whose stored periods entry is missing or out of date.
+// Returns the period entry, or { error } so the tile can say why instead of staying blank.
+export async function quotePeriod(symbol, period) {
+  if (!VISION_URL) return { error: 'no-worker' }
+  try {
+    const res = await fetch(VISION_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'quote', symbol, period }),
+    })
+    const data = await res.json().catch(() => ({}))
+    return res.ok && data.period ? data.period : { error: 'price', errorMsg: data.detail || data.error || `HTTP ${res.status}` }
+  } catch (e) {
+    return { error: 'network', errorMsg: String(e) }
+  }
+}
+
 // Live Yahoo search by name/ticker → [{symbol, name, exchange, quoteType}]. Finds any stock.
 export async function searchYahoo(query) {
   if (!VISION_URL || !query || query.trim().length < 2) return []
