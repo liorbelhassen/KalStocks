@@ -105,10 +105,12 @@ function toValue(v) {
   return { nullValue: null }
 }
 
-export async function patchDoc(token, pid, path, obj) {
+/** Write `obj`. With `mask`, only those top-level fields are replaced; the rest of the doc is kept. */
+export async function patchDoc(token, pid, path, obj, { mask = null } = {}) {
   const fields = {}
   for (const k in obj) fields[k] = toValue(obj[k])
-  const res = await fetch(`${base(pid)}/${path}`, {
+  const qs = mask ? `?${mask.map((f) => `updateMask.fieldPaths=${encodeURIComponent(f)}`).join('&')}` : ''
+  const res = await fetch(`${base(pid)}/${path}${qs}`, {
     method: 'PATCH',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ fields }),
@@ -116,7 +118,10 @@ export async function patchDoc(token, pid, path, obj) {
   if (!res.ok) throw new Error(`patch ${path}: ${res.status} ${(await res.text()).slice(0, 150)}`)
 }
 
-const docName = (pid, path) => `projects/${pid}/databases/(default)/documents/${path}`
+// Resource names in a request body are not URL-decoded like URL paths are: "%5EDJI" would be a
+// different document from "^DJI". Callers pass URL-style (encoded) paths, so decode each segment.
+const rawPath = (path) => path.split('/').map(decodeURIComponent).join('/')
+const docName = (pid, path) => `projects/${pid}/databases/(default)/documents/${rawPath(path)}`
 
 /** Replace many documents in ONE request (Firestore `commit`) — each call is one Worker subrequest. */
 export async function commitDocs(token, pid, docs) {
@@ -144,7 +149,7 @@ export async function getDocs(token, pid, paths) {
     body: JSON.stringify({ documents: paths.map((p) => docName(pid, p)) }),
   })
   if (!res.ok) throw new Error(`batchGet ${paths.length} docs: ${res.status} ${(await res.text()).slice(0, 150)}`)
-  const prefix = docName(pid, '')
-  for (const r of await res.json()) if (r.found) out[r.found.name.slice(prefix.length)] = decodeFields(r.found.fields)
+  const byName = Object.fromEntries(paths.map((p) => [docName(pid, p), p]))
+  for (const r of await res.json()) if (r.found && byName[r.found.name]) out[byName[r.found.name]] = decodeFields(r.found.fields)
   return out
 }

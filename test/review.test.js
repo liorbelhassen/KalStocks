@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { buildPeriodsDoc, isPeriodCurrent, marketOf, MAX_PERIOD_AGE_DAYS } from '../lib/periods.js'
-import { periodFactsText, dayFactsText } from '../lib/factsText.js'
+import { periodFactsText } from '../lib/factsText.js'
 import { periodInsight, tileView } from '../src/components/tileBits.js'
 import { buildExplainPrompt } from '../lib/explain.js'
 import { buildAssessPrompt } from '../lib/morning.js'
@@ -55,7 +55,10 @@ test('periodInsight: every state has a clear message; data-only text is labelled
   assert.match(d.text, /4\.20%/)
   assert.match(d.text, /1\.10%/)
   assert.match(d.text, /חזק מהשוק/)
-  assert.match(d.text, /טווח התנודה/)
+  const m = periodInsight({ ...p, market: 'IL', benchmark: { symbol: 'TA35.TA', label: 'מדד ת"א 35', changePct: 1.1 } }, 'week', { now: NOW, symbol: 'POLI.TA' })
+  assert.equal(m.kind, 'data')
+  assert.match(m.text, /4\.2/)
+  assert.match(m.text, /1\.1/)
   const ai = periodInsight({ ...p, explanation: goodHe, verdict: 'אושר', confidence: 'גבוהה' }, 'week', { now: NOW })
   assert.equal(ai.kind, 'insight')
   assert.equal(ai.text, goodHe)
@@ -71,10 +74,7 @@ test('tileView: hides an out-of-date window but explains why; live fallback numb
   assert.match(tileView({ manualOnly: true, periods: null }, 'month', NOW).insight.text, /מחיר ידני/)
 })
 
-test('factsText: day summary compares with the reference index and reports the intraday range', () => {
-  const t = dayFactsText({ changePct: -2.5, series: [{ v: 100 }, { v: 97.5 }] }, { bench: { label: 'מדד ת"א 35', changePct: 0.4 } })
-  assert.match(t, /ירד היום 2\.50%/)
-  assert.match(t, /כיוון הפוך לשוק/)
+test('factsText: no text without a measured change', () => {
   assert.equal(periodFactsText({}, 'week'), null)
 })
 

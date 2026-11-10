@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import PriceChart from './PriceChart'
 import MiniField from './MiniField'
+import SourceLinks from './SourceLinks'
 import { tileView, fmt, fmt0, fmtTs } from './tileBits'
 import { AGOROT_LABEL, quotePrice } from '../../lib/quote'
 
@@ -95,7 +96,7 @@ export default function StockTile({ stock, onRemove, onQuantity, onPrice, insigh
             {view.insight.confidence && (
               <div style={{ fontSize: 10.5, color: 'var(--text-dim)', marginTop: 1 }}>
                 ביטחון: {view.insight.confidence}
-                {view.insight.sources?.length > 0 && ` · ${view.insight.sources.slice(0, 2).join(', ')}`}
+                {view.insight.sources?.length > 0 && <> · <SourceLinks sources={view.insight.sources} symbol={stock.priceSymbol || stock.symbol} /></>}
               </div>
             )}
           </>
