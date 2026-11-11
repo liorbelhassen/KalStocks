@@ -155,7 +155,7 @@ test('isPeriodCurrent: window ending recently is current; old or unkeyed entries
 
 test('isCurrentPeriodEntry: a text written for a different move or leaking checker commentary is not reused', () => {
   const w = { key: 'K' }
-  const e = { key: 'K', explanation: 'המדד ירד 1.10% בשבוע האחרון.', verdict: 'נתונים בלבד', explainedPct: -1.1 }
+  const e = { key: 'K', explanation: 'המדד ירד 1.10% בשבוע האחרון.', verdict: 'תוקן', explainedPct: -1.1 }
   assert.equal(isCurrentPeriodEntry(e, w, -1.2), true)
   assert.equal(isCurrentPeriodEntry(e, w, 1.17), false)
   assert.equal(isCurrentPeriodEntry({ ...e, explainedPct: undefined }, w, -1.1), false)
@@ -163,12 +163,13 @@ test('isCurrentPeriodEntry: a text written for a different move or leaking check
 })
 
 
-test('isCurrentPeriodEntry: an old price-path fallback text is not reused', async () => {
+test('isCurrentPeriodEntry: a numbers-only text is never reused (AI research is retried)', async () => {
   const { isCurrentPeriodEntry } = await import('../lib/periods.js')
   const window = { key: 'MSFT__week__2026-09-23_2026-09-30' }
   const entry = { key: window.key, verdict: 'נתונים בלבד', explainedPct: 1.67, explanation: 'מיקרוסופט עלתה 1.67% בשבוע האחרון. באותה תקופה: S&P 500 −0.46%; לעומת S&P 500 (−0.46%) — כלומר תנועה ייחודית לנייר. הנקודה הגבוהה נרשמה ב-25.09.' }
   assert.equal(isCurrentPeriodEntry(entry, window, 1.67), false)
-  assert.equal(isCurrentPeriodEntry({ ...entry, explanation: 'מניית מיקרוסופט עלתה 1.67% בשבוע האחרון, הרבה יותר מהשוק.' }, window, 1.67), true)
+  assert.equal(isCurrentPeriodEntry({ ...entry, explanation: 'מניית מיקרוסופט עלתה 1.67% בשבוע האחרון, הרבה יותר מהשוק.' }, window, 1.67), false)
+  assert.equal(isCurrentPeriodEntry({ ...entry, verdict: 'תוקן', explanation: 'מניית מיקרוסופט עלתה 1.67% בשבוע האחרון אחרי הדוחות.' }, window, 1.67), true)
 })
 
 test('hasNewDailyCause: a numbers-only week is re-researched once a checked daily cause lands in its window', async () => {
